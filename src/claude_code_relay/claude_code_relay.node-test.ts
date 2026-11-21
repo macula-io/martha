@@ -165,6 +165,23 @@ test('a session start the launcher answers in a shape the relay does not know is
   assert.deepEqual(answer, { text: 'the rest of the chain' }, 'an empty line is not one this relay hands, so the start carries nothing')
 })
 
+test("a prompt the launcher hands the crew's state to carries it in the context the host hands the turn, after any already there (martha#984)", async () => {
+  const state = "Standing items (1), recorded by this crew's members: held the-landing"
+  const prompt = { ...PROMPT, context: ['a hook before this one'] }
+  const handed = next<typeof prompt>({ text: PROMPT.text })
+  await hooksOfTheRelay().get('prompt.submit')?.hook(fakeEngine(answering(200, JSON.stringify({ taken: 1, handed: state }))).$, prompt, handed.fn)
+  assert.deepEqual(handed.calls, [{ ...prompt, context: ['a hook before this one', state] }])
+
+  const plain = next<typeof PROMPT>({ text: PROMPT.text })
+  await hooksOfTheRelay().get('prompt.submit')?.hook(fakeEngine(sayYes).$, PROMPT, plain.fn)
+  assert.deepEqual(plain.calls, [PROMPT], 'a launcher with nothing to hand leaves the prompt as the host raised it')
+
+  const empty = next<typeof PROMPT>({ text: PROMPT.text })
+  const dropped = await hooksOfTheRelay().get('prompt.submit')?.hook(fakeEngine(answering(200, '{"taken":1,"handed":""}')).$, PROMPT, empty.fn)
+  assert.equal(empty.calls.length, 0, 'an empty hand is a shape the relay does not know, so the prompt is not entered')
+  assert.ok(typeof dropped === 'object' && dropped !== null && 'drop' in dropped, JSON.stringify(dropped))
+})
+
 test('the relay sends the engine fields unchanged: the start whole, the origin whole, the call with its answer', async () => {
   const fake = fakeEngine(sayYes)
   const start = { session_id: SESSION, source: 'fork', transcript_path: '/t', hook_event_name: 'SessionStart' }

@@ -121,6 +121,10 @@ export const A_FRESH_BUDGET: TheBudget = {
   closes: {},
 }
 
+/** How a refusal of the wait begins, and one of the floor: fixed words a reader of the budget may name (martha#980 package 4). */
+export const BACKING_OFF = "the crew's GitHub budget is backing off"
+export const AT_ITS_FLOOR = "the crew's GitHub budget is at its floor"
+
 /** What the budget says about one call, before any is made. */
 export type TheWord = { readonly may: true } | { readonly may: false; readonly refusal: string }
 
@@ -145,7 +149,7 @@ export function theWaitsWord(budget: TheBudget, now: number, zone: string, of?: 
   const wait = theWaitOn(budget, of)
   const free_at = wait.last_at + wait.wait_ms
   if (wait.wait_ms > 0 && now < free_at) {
-    return { may: false, refusal: `the crew's GitHub budget is backing off until ${theClockOf(free_at, zone)}.` }
+    return { may: false, refusal: `${BACKING_OFF} until ${theClockOf(free_at, zone)}.` }
   }
   return { may: true }
 }
@@ -154,7 +158,7 @@ export function theWaitsWord(budget: TheBudget, now: number, zone: string, of?: 
 export function theFloorsRefusal(budget: TheBudget, floor: number, zone: string): string | undefined {
   if (budget.remaining === null || budget.remaining > floor) return undefined
   const when = budget.resets_at === null ? '' : `, which resets at ${theClockOf(budget.resets_at, zone)}`
-  return `the crew's GitHub budget is at its floor: ${String(budget.remaining)} calls left${when}.`
+  return `${AT_ITS_FLOOR}: ${String(budget.remaining)} calls left${when}.`
 }
 
 /** Whether the crew may spend one call at the count this record holds, or why it may not. */
@@ -375,13 +379,17 @@ export interface TheSpendersPlaces {
   readonly clock_zone: string
 }
 
-/** The spender over one launch's places: the crew's budget record, its clock, and `gh` run in its checkout. */
-export function theGithubSpenderOf(places: TheSpendersPlaces): TheGithubSpender {
+/**
+ * The spender over one launch's places: the crew's budget record, its clock, and `gh` run in its checkout. With
+ * `timeout_ms`, each `gh` it runs is killed with its group at that bound (martha#980 package 4, T5).
+ */
+export function theGithubSpenderOf(places: TheSpendersPlaces, timeout_ms?: number): TheGithubSpender {
   const { processes } = places
+  const bound = timeout_ms === undefined ? {} : { timeout_ms }
   return {
     place: places.stores.crew.place(GITHUB_BUDGET_PLACE),
     clock: places.clock,
-    run: (args) => processes.run({ command: GITHUB_CLI, args, cwd: places.root }),
+    run: (args) => processes.run({ command: GITHUB_CLI, args, cwd: places.root, ...bound }),
     floor: places.github.budget_floor,
     zone: places.clock_zone,
   }

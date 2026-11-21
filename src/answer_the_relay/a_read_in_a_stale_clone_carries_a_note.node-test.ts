@@ -60,6 +60,7 @@ const aCrew = (): CrewTools => ({
   theContractInForce: async () => undefined,
   startSweeping: () => () => {},
   theLineToHandAtStart: async () => null,
+  theCrewStateOfATurn: async () => null,
   noteTheStart: () => undefined,
   ends: holdingTheEnds(),
   theReviewModelOfTheCall: async () => null,

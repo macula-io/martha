@@ -104,6 +104,7 @@ function aCrewNamingItsReviewerModel(): CrewTools {
     theContractInForce: async () => undefined,
     startSweeping: () => () => {},
     theLineToHandAtStart: async () => null,
+    theCrewStateOfATurn: async () => null,
     noteTheStart: () => undefined,
     ends: holdingTheEnds(),
     thePredecessorOf: async () => null,
