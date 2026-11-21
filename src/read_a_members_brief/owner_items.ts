@@ -172,11 +172,7 @@ export const briefProblems = (brief: string, owner: string) => {
   return reasons.join('; and ')
 }
 
-// Why a brief is not written, or '' when it may be.
-export const briefRefusal = (brief: string, owner: string) => {
-  const problems = briefProblems(brief, owner)
-  return problems === '' ? '' : `brief not written: ${problems}.`
-}
+// crew-code's briefRefusal is not ported: a brief write is noted after it lands, never refused (./note_a_brief_write.ts).
 
 // A brief dated on one of these days: the ones a shell command may just have written to.
 export const briefDatedOn = (name: string, days: string[]) => isBriefPath(name) && days.some(day => name.startsWith(`BRIEF_${day}_`))

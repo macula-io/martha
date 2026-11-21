@@ -54,6 +54,8 @@ interface TheLaunchDoes {
   readonly refreshed?: string
   readonly no_crew?: boolean
   readonly nowhere_to_record?: boolean
+  readonly note?: string
+  readonly note_fails?: boolean
 }
 
 function aCrew(does: TheLaunchDoes, seen: Seen): CrewTools {
@@ -79,6 +81,10 @@ function aCrew(does: TheLaunchDoes, seen: Seen): CrewTools {
     theSpendInForce: async () => undefined,
     noteTheCallCounted: async () => undefined,
     theReviewModelOfTheCall: async () => null,
+    theNoteAfterACall: async () => {
+      if (does.note_fails === true) throw new Error('the briefs place could not be read')
+      return does.note ?? ''
+    },
     theReviewModel: async () => THE_REVIEWER_MODEL,
     noteTheCallsAnswer: (call) => void seen.steps.push(`menu answer noted ${call.tool}`),
     refusesTheSubagent: async () => undefined,
@@ -323,4 +329,25 @@ test('#541 3: a turn the host never raised is kept in a session the entry holds,
   assert.equal(await answers.aTurnTheHostNeverRaised('session-a', { source: 'checkout_hook' }), true)
   assert.equal(recordedIn(answers, 'session-a').length, before.length + 1, 'the turn was not kept')
   assert.equal(await answers.aTurnTheHostNeverRaised('session-z', { source: 'checkout_hook' }), false)
+})
+
+test('#999 package 2b: the crew\'s note after a call rides on a taken result only, and an empty one adds nothing', async (t) => {
+  const A_NOTE = 'a brief this call wrote breaks the rule'
+  const noted = anEntry(t, { end_held_for: 'session-a', note: A_NOTE })
+  await started(noted.answers)
+  assert.deepEqual(await noted.answers.aResultCame(aResult()), { taken: 1, end_turn: 'turn-1', note: A_NOTE })
+
+  const stopped = anEntry(t, { note: A_NOTE, settings_fail: true })
+  await started(stopped.answers)
+  assert.deepEqual(await stopped.answers.aResultCame(aResult()), { stop: THE_SETTINGS_TURNED_OFF })
+
+  const plain = anEntry(t, {})
+  await started(plain.answers)
+  assert.deepEqual(await plain.answers.aResultCame(aResult()), { taken: 1 })
+})
+
+test('#999 package 2b: a note the crew could not make is no note, and the result is still taken (mutant: drop the catch)', async (t) => {
+  const failing = anEntry(t, { note_fails: true })
+  await started(failing.answers)
+  assert.deepEqual(await failing.answers.aResultCame(aResult()), { taken: 1 })
 })
