@@ -56,7 +56,7 @@ export interface HostWhileWaiting {
  * out. A request with no answer is the model's side of a silence; an answered one with nothing after it is the host's.
  */
 export interface ModelAttempt {
-  /** 1 for the first request that offers tools, and so on — the number the host's own request is counted by. */
+  /** 1 for the first request that is a turn of the owner's, and so on — the number the host's own request is counted by. */
   readonly number: number
   /** When the stand-in had read the request whole. */
   readonly received_at: number

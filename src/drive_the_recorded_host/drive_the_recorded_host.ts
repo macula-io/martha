@@ -13,7 +13,8 @@
 // hears no request while the host shows nothing new fails, with the last screen drawn before it.
 //
 // A model request is one that offers tools: the host's side requests (a title, a summary) offer none, are
-// answered with text and are not counted.
+// answered with text and are not counted. One the host offers tools to is no turn either — its ask for a suggestion of
+// the owner's next words (THE_HOSTS_ASK_FOR_A_SUGGESTION, martha#1037) — and it is answered and not counted the same way.
 
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
@@ -69,7 +70,7 @@ const memberIsUp = (member: string, shown: string): boolean => plainTextOf(shown
  * is the host's.
  */
 export interface ModelRequest {
-  /** 1 for the first request that offers tools, and so on. */
+  /** 1 for the first request that is a turn of the owner's, and so on; the host's own asks are never numbered. */
   readonly number: number
   readonly body: Readonly<Record<string, unknown>>
   /** When the stand-in had read the request whole. */
@@ -134,8 +135,8 @@ export interface RecordedHostRun {
   readonly requests: number
   /**
    * Whether the run is done, asked of every request heard so far (martha#251, martha#253). A member's flow completes
-   * here rather than at a count, because the host sends requests of its own — a suggestion for the owner's next turn
-   * among them — so `requests` is a ceiling, never the flow's last step. A run given none ends at that ceiling.
+   * here rather than at a count, because the host sends asks of its own between the owner's turns, so `requests` is a
+   * ceiling, never the flow's last step. A run given none ends at that ceiling.
    */
   readonly completesWhen?: (requests: readonly ModelRequest[]) => boolean
   /** How long the host may show nothing new before the run gives up on it; a host that is working is never cut off. */
@@ -296,11 +297,35 @@ async function bodyOf(request: IncomingMessage): Promise<Record<string, unknown>
 const offersTools = (body: Record<string, unknown>): boolean => Array.isArray(body['tools']) && body['tools'].length > 0
 
 /**
+ * The words the host puts in front of the one request that asks for a suggestion of the owner's next turn,
+ * "Suggest what the user might naturally type next into Claude Code" (martha#1037). It is no turn of the owner's and
+ * nothing it answers is drawn as one, but the host offers it the whole tool list, so a count of the requests that offer
+ * tools takes it for a turn, numbers every later turn one too high, and the run then waits on a reply the host never
+ * draws.
+ */
+export const THE_HOSTS_ASK_FOR_A_SUGGESTION = '[SUGGESTION MODE:'
+
+/**
+ * Whether a request is the host's ask for a suggestion of the owner's next turn rather than a turn of the owner's
+ * (martha#1037): the ask says what it wants as the last thing in the conversation, while a turn ends in what the owner
+ * typed or in the result of a call the host made.
+ */
+function asksForASuggestion(body: Record<string, unknown>): boolean {
+  const messages = Array.isArray(body['messages']) ? (body['messages'] as readonly Record<string, unknown>[]) : []
+  const content = messages.at(-1)?.['content']
+  if (typeof content === 'string') return content.startsWith(THE_HOSTS_ASK_FOR_A_SUGGESTION)
+  const first = Array.isArray(content) ? (content[0] as Record<string, unknown> | undefined) : undefined
+  const text = first?.['text']
+  return typeof text === 'string' && text.startsWith(THE_HOSTS_ASK_FOR_A_SUGGESTION)
+}
+
+/**
  * Answers one model request with the turn its number names, and records when the reply went out: a silence after this
- * one is the host's side of it, not the stand-in's (martha#264).
+ * one is the host's side of it, not the stand-in's (martha#264). The host's ask for a suggestion of the owner's next
+ * turn is answered here and never numbered (martha#1037): it is no turn, though it offers the whole tool list.
  */
 async function answerWithTheScript(script: ModelScript, heard: ModelRequest[], body: Record<string, unknown>, response: ServerResponse): Promise<void> {
-  const heard_request = offersTools(body) ? record(heard, body) : undefined
+  const heard_request = offersTools(body) && !asksForASuggestion(body) ? record(heard, body) : undefined
   const turn: ScriptedTurn = heard_request === undefined ? { text: 'a side answer' } : await script(heard_request)
   if ('refused' in turn) {
     const headers: Record<string, string> = { 'content-type': 'application/json' }
