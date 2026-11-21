@@ -98,6 +98,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'owners_settings_directory',
     'row_streams_directory',
     'read_one_file_held_by_its_descriptor',
+    'a_work_directory_on_this_machine',
   ])
   assert.deepEqual(declaredHostGlue(repository, 'hostAdapters'), THE_HOST_ADAPTERS)
 })

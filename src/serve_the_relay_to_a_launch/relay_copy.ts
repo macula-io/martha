@@ -48,6 +48,9 @@ export const RELAY_FILES = [
   // The one rule for when a session reads its crew's channel (martha#253 r=2): the host refused a launch whose copy
   // did not carry it.
   'hooks/crew_channel_reading.ts',
+  // The one rule for when a session is woken with its next step (martha#959): crew.tsx imports it, so a copy without
+  // it is refused.
+  'hooks/crew_waking_an_idle_member.ts',
   // The beat a running main turn is asked about on (martha#311): crew.tsx imports it, so a copy without it is refused.
   'hooks/crew_turn_beat.ts',
   // The owner's `/crew` (martha#927): crew.tsx imports what it asks and prints, so a copy without it is refused.
