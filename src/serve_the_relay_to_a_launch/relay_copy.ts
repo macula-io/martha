@@ -54,6 +54,8 @@ export const RELAY_FILES = [
   'hooks/crew_command.ts',
   // A crew tool's mesh call as the member, through its own server (martha#1016): carried so the tool that calls it loads.
   'hooks/call_the_mesh_as_the_member.ts',
+  // The order a crew tool answers for a mesh call, carried to that call (martha#1016): crew.tsx imports it.
+  'hooks/carry_a_mesh_order.ts',
 ] as const
 
 /** The copy's name inside a launch's relay directory. */
