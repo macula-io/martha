@@ -10,10 +10,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { DECLARATION_DIRECTORY, DECLARATION_FILE, DeclarationRefused, declareCrewOnHosts, PARKED } from '../declare_crew/declare_crew.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, DeclarationRefused, PARKED, WORKTREES_BESIDE_CLONES, declareCrewOnHosts, theWorkspaceTheCrewDeclared } from '../declare_crew/declare_crew.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { THE_VOCABULARIES_OF_HOST } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
-import { noCrewDeclaredAt, THE_SMALLEST_DECLARATION, upStarts } from './bring_up_the_declared_crew.ts'
+import { guardsLineOf, noCrewDeclaredAt, THE_SMALLEST_DECLARATION, upStarts } from './bring_up_the_declared_crew.ts'
 
 const documents = { read: (path: string) => readFile(path, 'utf8') }
 
@@ -56,4 +56,23 @@ test('#511: up starts every member not parked; a member with no parked is not pa
 test('#511: a parked that is not true or false is refused by its field, never read as either', async (t) => {
   const root = aWorkspaceDeclaring(t, { ...THE_SMALLEST_DECLARATION, members: [{ name: 'Lead', role: 'builder', [PARKED]: 'yes' }] })
   await assert.rejects(readAt(root), (error: unknown) => error instanceof DeclarationRefused && error.message.includes(`members[0].${PARKED}`))
+})
+
+test('#958: up says the git guard is off when the crew names no places, and says nothing when it names them', async (t) => {
+  const at = join('/a-workspace-a-test-names', DECLARATION_DIRECTORY, DECLARATION_FILE)
+  const noPlaces = await readAt(aWorkspaceDeclaring(t, THE_SMALLEST_DECLARATION))
+  assert.match(guardsLineOf(at, noPlaces) ?? '', /git guard is off/)
+  const withPlaces = await readAt(aWorkspaceDeclaring(t, { ...THE_SMALLEST_DECLARATION, workspace: { root: 'projects' } }))
+  assert.equal(guardsLineOf(at, withPlaces), undefined, 'a crew that names its places is not told its guard is off')
+})
+
+test('#958: the no-crew line teaches the workspace block, and the smallest declaration with one names its places', async (t) => {
+  const said = noCrewDeclaredAt(join('/a-workspace-a-test-names', DECLARATION_DIRECTORY, DECLARATION_FILE))
+  assert.match(said, /workspace\.root/, 'the line names the field that places the clones')
+  assert.equal(said.includes('\n'), false, said)
+  const root = aWorkspaceDeclaring(t, { ...THE_SMALLEST_DECLARATION, workspace: { root: 'projects' } })
+  const places = theWorkspaceTheCrewDeclared(await readAt(root))
+  assert.ok(places !== undefined, 'the smallest declaration with a root is guarded')
+  assert.equal(places.clones, join(root, 'projects'))
+  assert.equal(places.worktrees, join(root, WORKTREES_BESIDE_CLONES), 'the worktrees are made beside the folder the clones sit in')
 })
