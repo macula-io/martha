@@ -48,11 +48,26 @@ export function meshOrderIn(said: string): AMeshOrder | null {
   return { procedure, args, timeout_ms, ...(realm === undefined ? {} : { realm }), then, keep: keep ?? null }
 }
 
-/** The words the model is shown for a tool's answer: the answer itself, or the `then` tool's words on the order's reply. */
+/**
+ * The most calls one tool call's orders make: a `then` tool may answer another order (crew mail opens a mailbox in
+ * three sealed calls), and a chain that never ends is stopped here rather than calling without end.
+ */
+export const MOST_MESH_CALLS_PER_TOOL_CALL = 4
+
+/** What the model is shown when a tool's orders went past MOST_MESH_CALLS_PER_TOOL_CALL: never the order itself. */
+export const TOO_MANY_MESH_CALLS = `The mesh call was stopped: one tool call may make at most ${MOST_MESH_CALLS_PER_TOOL_CALL}, and its tool kept ordering more.`
+
+/**
+ * The words the model is shown for a tool's answer: the answer itself, or the last `then` tool's words. Each `then`
+ * tool may order the next call, up to MOST_MESH_CALLS_PER_TOOL_CALL calls in all.
+ */
 export async function carryAMeshOrder($: MeshCallEngine, said: string, ask: AskTheLauncher): Promise<string> {
-  const order = meshOrderIn(said)
-  if (order === null) return said
-  const { then, keep, ...call } = order
-  const answer = await callTheMeshAsTheMember($, call)
-  return ask(then, { keep, answer })
+  let words = said
+  for (let made = 0; made < MOST_MESH_CALLS_PER_TOOL_CALL; made++) {
+    const order = meshOrderIn(words)
+    if (order === null) return words
+    const { then, keep, ...call } = order
+    words = await ask(then, { keep, answer: await callTheMeshAsTheMember($, call) })
+  }
+  return meshOrderIn(words) === null ? words : TOO_MANY_MESH_CALLS
 }

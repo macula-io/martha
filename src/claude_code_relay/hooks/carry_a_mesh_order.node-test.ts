@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { carryAMeshOrder, meshOrderIn } from './carry_a_mesh_order.ts'
+import { carryAMeshOrder, meshOrderIn, MOST_MESH_CALLS_PER_TOOL_CALL, TOO_MANY_MESH_CALLS } from './carry_a_mesh_order.ts'
 import type { MeshCallEngine } from './call_the_mesh_as_the_member.ts'
 
 const PROCEDURE = 'a_provider/keep_a_note'
@@ -72,4 +72,18 @@ test('#1016: an answer that orders nothing is shown as it is, and nothing is cal
 test('#1016: an order may name no realm, and then the call asks none', async () => {
   const order = meshOrderIn(JSON.stringify({ mesh_order: { procedure: PROCEDURE, args: ARGS, timeout_ms: TIMEOUT_MS, then: THEN, keep: null } }))
   assert.deepEqual(order, { procedure: PROCEDURE, args: ARGS, timeout_ms: TIMEOUT_MS, then: THEN, keep: null })
+})
+
+test('#1016: a next tool may order the next call, and a chain is stopped at its bound, the model never shown an order', async () => {
+  const engine = anEngine(sealed({}))
+  const second = anOrder({ then: 'the_second_tool' })
+  const chained: string[] = []
+  const twoHops = await carryAMeshOrder(engine.$, anOrder(), (tool) => (chained.push(tool), Promise.resolve(tool === THEN ? second : 'the second answer')))
+  assert.equal(twoHops, 'the second answer')
+  assert.deepEqual(chained, [THEN, 'the_second_tool'])
+
+  const endless = anEngine(sealed({}))
+  const shown = await carryAMeshOrder(endless.$, anOrder(), () => Promise.resolve(anOrder()))
+  assert.equal(shown, TOO_MANY_MESH_CALLS)
+  assert.equal(endless.asked.length, MOST_MESH_CALLS_PER_TOOL_CALL)
 })
