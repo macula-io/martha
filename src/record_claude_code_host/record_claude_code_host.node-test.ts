@@ -86,9 +86,9 @@ const PREFERRED_CONSTANT = 'aNameOnlyTheHostDefines'
  * the Set built beside the array and the loop over it, the array the spread
  * brings in, one function per computed file that returns the host's own
  * template (the last from a constant it closes over), the host's own
- * statements naming the four folders it runs and the file beside them, and the
- * one chooser that builds the global config file it prefers from a constant it
- * defines (martha#187 r=3).
+ * statements naming the folders it runs and the sentence naming some of them
+ * with the file beside them, and the one chooser that builds the global config
+ * file it prefers from a constant it defines (martha#187 r=3).
  */
 const PLACE_PARTS: Readonly<Record<string, string>> = {
   protected_config_names: [
@@ -101,6 +101,8 @@ const PLACE_PARTS: Readonly<Record<string, string>> = {
   ].join(';'),
   config_code_places: [
     ...CODE_PLACES.folders.flatMap((folder) => [`This writes to the Claude Code ${folder} folder. A file there is run.`, `This writes to the Claude Code ${folder} folder. A file there is run.`]),
+    // The sentence names no more folders than the host's own wording lists: the host may state a place its catch-all
+    // sentence does not, which is how 2.1.330's rm-guard folder reads (martha#1031).
     `So the write may land in the ${CODE_PLACES.folders[0] ?? ''}, ${CODE_PLACES.folders[1] ?? ''}, ${CODE_PLACES.folders[2] ?? ''} or ${CODE_PLACES.folders[3] ?? ''} folder or in ${CODE_PLACES.files[0] ?? ''} of the Claude Code config directory.`,
   ].join(' '),
   legacy_global_config_names: [
@@ -520,6 +522,18 @@ test('a host whose frontmatter pattern carries a flag, or that has two markdown 
   }
 })
 
+// The minifier reuses a short name in another module (martha#1031): 2.1.330 gives the frontmatter pattern's name to a
+// markdown-escape pattern too. The frontmatter pattern is the literal that opens at the start with no flags, so a
+// literal of another shape given that name changes nothing, and two of the shape cannot be told apart.
+test('a host that gives the frontmatter pattern\'s name another literal still reads, and one that gives it two of the shape cannot be read (martha#1031)', (t) => {
+  const named = check(hostHolding(t, { ...RECORDED_PARTS, frontmatter_pattern: `${MARKDOWN_PARTS.frontmatter_pattern ?? ''}var aKeptSecondDeclarator=1,${FRONTMATTER_PATTERN}=/[!*<]/g;` }), RECORDED_HOST.host_version)
+  assert.equal(named.status, 0, named.stdout)
+  assert.equal(named.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\n`)
+  const twice = check(hostHolding(t, { ...RECORDED_PARTS, frontmatter_pattern: `${MARKDOWN_PARTS.frontmatter_pattern ?? ''}var aKeptThirdDeclarator=1,${FRONTMATTER_PATTERN}=/^---other/;` }), RECORDED_HOST.host_version)
+  assert.equal(twice.status, 1, twice.stdout)
+  assert.equal(twice.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: markdown the host loads\n`)
+})
+
 test('a host that renames the global config it prefers fails the check naming the field, and one with two choosers cannot be read (martha#187 r=3)', (t) => {
   const renamed = PLACE_PARTS.legacy_global_config_names?.replaceAll(PREFERRED_GLOBAL_CONFIG, 'a-renamed-global-config.json') ?? ''
   assert.equal(renamed.includes(PREFERRED_GLOBAL_CONFIG), false, 'the renamed host names only the new file')
@@ -556,15 +570,27 @@ test('a host that adds a protected config-dir place, or renames a folder it runs
   }
 })
 
-test('a host whose statements and sentence name different places, or that walks two protected arrays, cannot be read, naming the part (martha#187)', (t) => {
+test('a host whose sentence names a place its statements do not, or that walks two protected arrays, cannot be read, naming the part (martha#187)', (t) => {
+  const sentence = PLACE_PARTS.config_code_places ?? ''
+  const misnamed = sentence.replace(`land in the ${CODE_PLACES.folders[0] ?? ''},`, 'land in the a-new-place,')
+  assert.notEqual(misnamed, sentence, 'the planted sentence names a folder the statements do not')
   for (const planted of [
-    { config_code_places: `${PLACE_PARTS.config_code_places ?? ''} This writes to the Claude Code a-new-place folder.` },
+    { config_code_places: misnamed },
     { protected_config_names: `${PLACE_PARTS.protected_config_names ?? ''};${PLACE_PARTS.protected_config_names ?? ''}` },
   ]) {
     const run = check(hostHolding(t, { ...RECORDED_PARTS, ...planted }), RECORDED_HOST.host_version)
     assert.equal(run.status, 1, JSON.stringify(Object.keys(planted)))
     assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: protected config places\n`)
   }
+})
+
+// The host states a place before its catch-all sentence lists it: 2.1.330's statements name the rm-guard folder it runs
+// and its sentence still lists the four it listed before (martha#1031), so the statements are the places and the
+// sentence is a second witness that may name fewer. A place only so stated is recorded, and the check names the field.
+test('a host whose statements name a place its sentence does not still reads, and the check names the field (martha#1031)', (t) => {
+  const planted = `${PLACE_PARTS.config_code_places ?? ''} This writes to the Claude Code a-place-only-the-statements-name folder.`
+  assert.notEqual(planted, PLACE_PARTS.config_code_places, 'the planted host states a place its sentence does not')
+  assertDiffers(check(hostHolding(t, { ...RECORDED_PARTS, config_code_places: planted }), RECORDED_HOST.host_version), 'config_code_places')
 })
 
 // The minifier reuses a short name inside one module (martha#908): 2.1.329 names an empty array in its sandbox setup
