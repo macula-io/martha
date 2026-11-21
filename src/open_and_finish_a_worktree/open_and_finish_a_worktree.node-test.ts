@@ -1048,7 +1048,22 @@ test('worktree_finish refuses an ask queued without a repository, and one at a t
     refusedOf(await tools.finish.answer({ ...finishedBranch(branch), ask: String(anotherTip) })),
     new RegExp(`stands at ${tipOnOrigin(fixture, branch)}, and the owner approved ${A_TIP_NOTHING_STANDS_AT}`),
   )
-  assert.equal(onOrigin(fixture, branch), true, 'a copy at a tip the owner never saw was removed')
+  // Origin moves on after the owner was shown the clone's tip: the yes covers the copy they were shown, and no other, so
+  // origin's copy is the one that keeps both. A refusal read from the clone's copy would pass here with origin's already
+  // gone, which is the half a finish this refuses (martha#962's rule, and the mutant this pins).
+  gitIn(fixture.seed, 'fetch', '--quiet', 'origin')
+  gitIn(fixture.seed, 'checkout', '--quiet', '-B', 'moved-on', `origin/${branch}`)
+  writeFileSync(join(fixture.seed, 'later.txt'), 'a later commit\n')
+  commitIn(fixture.seed, 'a later commit on origin')
+  gitIn(fixture.seed, 'push', '--quiet', 'origin', `moved-on:${branch}`)
+  gitIn(fixture.clone, 'fetch', '--quiet', 'origin')
+  const theShownTipOnly = await anAnsweredAsk(tools, { repo: 'acme/widget', branch, local_tip: tipInTheClone(fixture, branch), origin_tip: null })
+  assert.match(
+    refusedOf(await tools.finish.answer({ ...finishedBranch(branch), ask: String(theShownTipOnly) })),
+    /origin's .* stands at .*, and no copy of it was there when the owner was asked/,
+  )
+  assert.equal(onOrigin(fixture, branch), true, 'origin copy at a tip the owner never saw was removed')
+  assert.notEqual(gitIn(fixture.clone, 'branch', '--list', branch), '', "the clone's copy went while origin's stayed")
 })
 
 test('worktree_finish removes a live worktree whose commits are on no remote, when the tip the owner approved holds them (martha#973)', async (t) => {
