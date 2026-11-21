@@ -71,6 +71,7 @@ const aCrew = (): CrewTools => ({
   noteTheCallsAnswer: () => undefined,
   refusesTheSubagent: async () => undefined,
   refusesTheGitIn: async () => undefined,
+  noteTheWorkInHand: () => {},
 })
 
 /** A started relay over a checkout of its own, with the note `stale_reads` (or none), and what stopped it. */

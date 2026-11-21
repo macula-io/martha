@@ -42,6 +42,7 @@ import {
   checkedBody,
   dialogBody,
   heardStart,
+  inFlightBody,
   RELAY_DEADLINE_MS,
   RELAY_ORIGIN,
   RELAY_PATHS,
@@ -273,6 +274,15 @@ export const register = (on: RelayOn): void => {
     const session_id = await $.session.id()
     const heard = await relay($, 'subagent_stopped', subagentBody(session_id, e), heardTaken)
     return heard.yes ? next(e) : { drop: refusal(heard.why) }
+  }).catch(async (_$, e, next) => next(e))
+
+  // The end of a turn, which carries the work the session still has in hand (martha#1000, gap 8 of #957): the background
+  // tasks it started and the wake-ups it scheduled. Nothing is gated on it and nothing is dropped: the row is told, and
+  // the turn goes on. A launcher that cannot be heard leaves the beat to say what it last heard.
+  on<ClassicSubagent, unknown>('classic.Stop', async ($, e, next) => {
+    const done = await next(e)
+    await relay($, 'session_stopped', inFlightBody(await $.session.id(), e), heardTaken)
+    return done
   }).catch(async (_$, e, next) => next(e))
 
 

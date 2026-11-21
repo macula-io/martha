@@ -15,6 +15,7 @@ import { theCrewCommandAnswers, theCrewCommandResult, type Heard } from './crew_
 import { readingTheChannelWith } from './crew_channel_reading.ts'
 import { THE_WAKE_ASK, wakingAnIdleMemberWith, type WakingAnIdleMember } from './crew_waking_an_idle_member.ts'
 import { beatingTheTurnWith } from './crew_turn_beat.ts'
+import { NO_TASKS, afterATaskWasCreated, afterATaskWasUpdated, afterAToDoListWasWritten, theTasksToPost, type TheTaskList } from './crew_tasks.ts'
 import { orderIn, paneIn, PANE_CHROME_ROWS, switchTheModelOnTheHost, theOwnersListIn, type TheOrder, type TheOwnersListShown } from './crew_answers.ts'
 
 /** Why a tool call has no answer: Martha did not launch this session (it was started by hand), or the launcher could not be heard. */
@@ -378,6 +379,86 @@ async function answerTheCrewCommand($: CrewEngine, e: { readonly args?: unknown 
 }
 
 /**
+ * The owner's `/crew-park` (martha#1000, gap 8 of #957): parks the session it is typed in, or `/crew-park off` unparks
+ * it. The ask's name is spelled out here for the reason ./coincidences.ts gives about every name a hooks module holds
+ * by literal: the host installs this folder as a copy, so the constant it restates cannot be imported.
+ */
+async function answerTheParkCommand($: CrewEngine, e: { readonly args?: unknown }): Promise<unknown> {
+  const wanted = typeof e.args === 'string' ? e.args.trim() : ''
+  const heard = await hearTheLauncher($, 'park_this_session', { parked: wanted !== 'off' })
+  return { text: 'said' in heard ? heard.said : `Martha did not answer: ${heard.why}` }
+}
+
+/** The owner's `/crew-progress on|off` (martha#1000): this session's progress reporting, answered by the launcher. */
+async function answerTheProgressCommand($: CrewEngine, e: { readonly args?: unknown }): Promise<unknown> {
+  const wanted = typeof e.args === 'string' ? e.args.trim() : ''
+  const heard = await hearTheLauncher($, 'switch_progress_reporting', { wanted })
+  return { text: 'said' in heard ? heard.said : `Martha did not answer: ${heard.why}` }
+}
+
+/** The task list the session keeps, folded from the host's own task tools (martha#1000, gap 8 of #957). */
+let theSessionsTasks: TheTaskList = NO_TASKS
+
+/**
+ * Posts this session's task list to the launcher, which writes it onto the member's row. A launcher that cannot be
+ * heard is told to the owner once and the member's turn goes on: the list is the row's, and nothing the member does
+ * waits on it.
+ */
+async function postTheSessionsTasks($: CrewEngine): Promise<void> {
+  const heard = await hearTheLauncher($, 'note_the_tasks_the_session_keeps', { tasks: theTasksToPost(theSessionsTasks) })
+  if (!('said' in heard)) $.ui.toast(`Martha did not note this session's tasks: ${heard.why}`)
+}
+
+/** Whether the host's own tool refused or failed the write: a write that did not happen moves no list. */
+function theHostRefusedTheWrite(ran: unknown): boolean {
+  if (typeof ran !== 'object' || ran === null) return true
+  const answer = ran as { readonly deny?: unknown; readonly isError?: unknown }
+  return answer.deny !== undefined || answer.isError === true
+}
+
+/** The id the host's own `TaskCreate` answered with, or '' when it made none this session can name again. */
+function theCreatedIdIn(ran: unknown): string {
+  const made = typeof ran === 'object' && ran !== null ? (ran as { readonly result?: unknown }).result : undefined
+  const task = typeof made === 'object' && made !== null ? (made as { readonly task?: unknown }).task : undefined
+  const id = typeof task === 'object' && task !== null ? (task as { readonly id?: unknown }).id : undefined
+  return typeof id === 'string' ? id : ''
+}
+
+/**
+ * `TaskCreate`, `TaskUpdate` and `TodoWrite` (martha#1000, gap 8 of #957): the host's own tool runs first, and the list
+ * it leaves is folded and posted. Each answers with the host's own answer, so the member's tasks are exactly the
+ * host's; only the member's row is Martha's.
+ */
+const afterATaskIsCreated = async ($: CrewEngine, e: Record<string, unknown>, next: CrewNext): Promise<unknown> => {
+  const ran = await next(e)
+  const id = theHostRefusedTheWrite(ran) ? '' : theCreatedIdIn(ran)
+  if (id === '') return ran
+  theSessionsTasks = afterATaskWasCreated(theSessionsTasks, { id, subject: typeof e['subject'] === 'string' ? e['subject'] : '' })
+  await postTheSessionsTasks($)
+  return ran
+}
+
+const afterATaskIsUpdated = async ($: CrewEngine, e: Record<string, unknown>, next: CrewNext): Promise<unknown> => {
+  const ran = await next(e)
+  if (theHostRefusedTheWrite(ran)) return ran
+  theSessionsTasks = afterATaskWasUpdated(theSessionsTasks, {
+    task_id: typeof e['taskId'] === 'string' ? e['taskId'] : '',
+    subject: e['subject'],
+    status: e['status'],
+  })
+  await postTheSessionsTasks($)
+  return ran
+}
+
+const afterAToDoListIsWritten = async ($: CrewEngine, e: Record<string, unknown>, next: CrewNext): Promise<unknown> => {
+  const ran = await next(e)
+  if (theHostRefusedTheWrite(ran)) return ran
+  theSessionsTasks = afterAToDoListWasWritten(theSessionsTasks, e['todos'])
+  await postTheSessionsTasks($)
+  return ran
+}
+
+/**
  * The owner's `/crew-budget` (martha#990): what the owner typed goes to the launcher as it was typed, and its answer is
  * shown to the owner alone, as `/crew`'s is, so the model takes no turn and never reads it.
  */
@@ -415,11 +496,37 @@ async function drawThePane($: CrewEngine, e: unknown): Promise<unknown> {
   )
 }
 
-/** The owner's commands, each registered, or the host answers "Unknown command" and never reaches its hook (martha#927). */
+/**
+ * The owner's two overrides and the host's own task tools, each registered where the host runs it (martha#1000, gap 8 of
+ * #957). Its own function so the registration it is called from stays under the structural floor.
+ */
+function registerTheSessionsOwnTab(on: (event: string, options?: unknown, handler?: unknown) => unknown): void {
+  on('command.run', { command: 'crew-park' }, answerTheParkCommand)
+  on('command.run', { command: 'crew-progress' }, answerTheProgressCommand)
+  on('tool.call', { tool: 'TaskCreate' }, afterATaskIsCreated)
+  on('tool.call', { tool: 'TaskUpdate' }, afterATaskIsUpdated)
+  on('tool.call', { tool: 'TodoWrite' }, afterAToDoListIsWritten)
+}
+
+/**
+ * The commands this session registers (martha#927, martha#1000): the pane, `/crew`, and the owner's two overrides. Each
+ * is registered, or the host answers "Unknown command" and never reaches the hook that would answer it. It is its own
+ * function so the start it is called from stays under the structural floor every function here is held to.
+ */
 async function registerTheCommands($: CrewEngine): Promise<void> {
   await $.command.register({ name: PANE, description: "Open the crew's pane" })
   await $.command.register({ name: CREW_COMMAND, description: 'See your crew, or say one thing to one member', argumentHint: '[<member> <text>]' })
+  await $.command.register({ name: 'crew-park', description: 'Park this session so wake-on-idle leaves it alone: /crew-park, and /crew-park off unparks it', argumentHint: 'off' })
+  await $.command.register({ name: 'crew-progress', description: 'Turn progress reporting on or off for this session: /crew-progress on|off', argumentHint: 'on|off' })
   await $.command.register({ name: BUDGET_COMMAND, description: "Show the crew's budget, or set the reviewer model's gauge", argumentHint: '[<reviewer model> <percent>|off]' })
+}
+
+/** The owner's own commands (martha#927, #990), each answered by the launcher and shown to the owner alone. */
+function registerTheOwnersCommands(on: (event: string, options?: unknown, handler?: unknown) => unknown): void {
+  // `/crew` is answered without `next`, so no command runs beneath it; what it asks and prints is ./crew_command.ts's.
+  on('command.run', { command: CREW_COMMAND }, answerTheCrewCommand)
+  // `/crew-budget` is shown to the owner alone, as `/crew` is.
+  on('command.run', { command: BUDGET_COMMAND }, answerTheBudgetCommand)
 }
 
 /** The crew's tools registered with this host, and the pane drawn. */
@@ -465,12 +572,8 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
 
   on('ui.render', { component: 'Pane', requestId: PANE }, drawThePane)
 
-  // The owner's `/crew` (martha#927): answered here without `next`, so no command runs beneath it, and shown to the
-  // owner alone, so the model takes no turn. What it asks and prints is ./crew_command.ts's.
-  on('command.run', { command: CREW_COMMAND }, answerTheCrewCommand)
-
-  // The owner's `/crew-budget` (martha#990): shown to the owner alone, as `/crew` is.
-  on('command.run', { command: BUDGET_COMMAND }, answerTheBudgetCommand)
+  registerTheOwnersCommands(on)
+  registerTheSessionsOwnTab(on)
 
   // Registration happens once this host shows the session, as the tools are the launcher's to name; the pane opens
   // by itself only when the crew's declaration switched the dashboard on.

@@ -9,7 +9,7 @@
 
 import { offlineAfterMsOf, THRESHOLDS_WHEN_UNNAMED, type CrewThresholds } from '../declare_crew/the_crews_thresholds.ts'
 import { CLOCK_ZONE_WHEN_UNNAMED, theClockOf } from '../declare_crew/the_crews_clock_zone.ts'
-import { BEAT_INTERVAL_MS, IDLE, OFFLINE, STATES, type CrewToolsOnARow, type DashboardRow, type HostFacts, type Progress, type ShownState, type Waits } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { BEAT_INTERVAL_MS, IDLE, OFFLINE, STATES, theOpenTaskIn, type CrewToolsOnARow, type DashboardRow, type HostFacts, type Progress, type ShownState, type Waits } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { whatTheOwnerIsShown } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
 
 /** One member's row as a reader is shown it. */
@@ -105,7 +105,9 @@ function rowOf(member: string, beat: DashboardRow | undefined, now: number, offl
     session: beat.session,
     state,
     holds: beat.holds,
-    task: beat.task,
+    // The member's own word about what it is doing, or — when it has reported none — the task its own session's task
+    // list has open (martha#1000, gap 8 of #957): one column, the member's word first.
+    task: beat.task !== '' ? beat.task : theOpenTaskIn(beat.tasks ?? []),
     progress: beat.progress,
     waits: beat.waits,
     needs: shown.needs,

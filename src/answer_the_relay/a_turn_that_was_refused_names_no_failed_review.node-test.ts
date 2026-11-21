@@ -113,6 +113,7 @@ function aCrewNamingItsReviewerModel(): CrewTools {
     theReviewModelOfTheCall: async (call) => (isAReview(call.input, CLAUDE_CODE_SUBAGENT_SPAWN) ? THE_REVIEWER_MODEL : null),
     theReviewModel: async () => THE_REVIEWER_MODEL,
     noteTheCallsAnswer: () => undefined,
+    noteTheWorkInHand: () => {},
     refusesTheSubagent: async () => undefined,
     refusesTheGitIn: async () => undefined,
   }

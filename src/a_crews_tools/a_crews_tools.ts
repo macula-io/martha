@@ -14,12 +14,13 @@
 // tool, the state one place's tools hold between calls, the handler table and the answers the mod asks for by name —
 // the refresh flow's question among them, which reads the launch's every place and so cannot leave this file.
 
-import { declareCrew, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { declareCrew, sameMemberName, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { holdingTheEnds, type TheEndsHold } from '../end_a_running_turn/hold_the_end.ts'
 import { answerAChannelAsk, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { theLineToHandAtStart, type TheStartLine } from '../hand_a_member_its_crew_text/the_start_line.ts'
 import { theCrewStateOfATurn } from '../hand_a_member_its_crew_text/the_crew_state_of_a_turn.ts'
 import type { DocumentStore, HandoverStampStore, HostContract, Refused, TheCrewFilesStores, ToolNames } from '../host_contract/host_contract.ts'
+import type { AWorkInHandReported } from '../host_contract/host_contract.ts'
 import { VERIFY_RANGE_TOOL, verifyTheRangeOver } from '../check_a_range_before_the_owner_says_yes/the_verify_range_tool.ts'
 import { theRangeACallNames } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { THE_CHANNEL_READ_ASK, theChannelReadAsk } from '../keep_the_crew_channel/the_channel_read.ts'
@@ -72,15 +73,13 @@ import {
   theOrderOf,
   theQuestionIn,
   theRefreshAct,
-  type TheAct,
   type TheRefreshPlaces,
-  type TheSessionsQuestion,
 } from '../refresh_a_member/the_refresh_flow.ts'
 import { REPORT_PROGRESS_TOOL, reportProgressOver } from '../report_where_the_work_stands/report_progress_tool.ts'
 import { theBudgetOver, theSpendOnARow, type TheBudgetAsACrewHoldsIt } from '../hold_a_package_to_its_budget/the_budget_tools.ts'
 import type { ASpendInForce } from '../hold_a_package_to_its_budget/refuse_a_call_past_the_budget.ts'
 import type { TheCrew } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
-import { type ASpawnedAgent, theReviewRuleOver, type TheReviewRule } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
+import { type ASpawnedAgent, carriesAReviewWord, theReviewRuleOver, type TheReviewRule } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
 import { theNudgesGoTo } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
 import { seeTheCrew } from '../see_the_crew/see_the_crew.ts'
 import { SEE_THE_CREW_TOOL, seeTheCrewOver } from '../see_the_crew/the_see_the_crew_tool.ts'
@@ -91,11 +90,9 @@ import { SAY_TO_THE_CREW_TOOL, sayToTheCrewOver } from '../send_a_crew_message/s
 import { GH_MS } from '../send_a_crew_message/the_runs_a_handoff_names.ts'
 import {
   BEAT_INTERVAL_MS,
-  SPEND_FIELD,
   beatAfter,
   rowAfterASwitch,
   theRowWithNothingSaid,
-  type AUnitOnARow,
   type DashboardRow,
   type DashboardStore,
   type TheOwnersDefaultTold,
@@ -104,13 +101,25 @@ import { READ_THE_RECEIPTS_TOOL, theReceiptsOver } from '../show_what_a_message_
 import { theGithubSpenderOf } from '../spend_the_github_budget/spend_the_github_budget.ts'
 import type { StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { RESTART_A_MEMBER_TOOL, theRestartToolOver } from '../stop_and_restart_a_member/the_restart_tool.ts'
-import { RETURN_TO_YOUR_OWN_MODEL_TOOL, SWITCH_YOUR_MODEL_TOOL, returnToYourOwnModelOver, switchTheModelOver, type TheTriggerPlace } from '../switch_a_members_model/the_switch_tools.ts'
+import { RETURN_TO_YOUR_OWN_MODEL_TOOL, SWITCH_YOUR_MODEL_TOOL, returnToYourOwnModelOver, returnedWhenTheSwitchedPackageFinished, switchTheModelOver, type TheTriggerPlace } from '../switch_a_members_model/the_switch_tools.ts'
 import { theBeatOverTheCrewTools, theBeatsMarkedOn, withTheOwedLine, withTheTimesLineOnAReturn, type AHandedWindow, type HoldingTheWatch, type TheWindowPlaces } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { theRootsInForce } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 import { WAIT_FOR_CI_TOOL, theCiWaitACallNames, theCiWaitOver } from '../wait_for_ci/the_ci_wait_tool.ts'
 import { WRITE_MY_HANDOVER_SCHEMA, theHandoverToolOver } from '../write_my_handover/the_handover_tool.ts'
 import { NO_MODEL_NAMED, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
+import {
+  PROGRESS_REPORTING_IS_OFF,
+  anAskTheSessionsOwnTabMakes,
+  mayPutAQuestionToTheOwner,
+  theRowSettledBetweenTurns,
+  theSessionsOwnState,
+  theWorkInHandHeld,
+  type AnOwnTabAsked,
+  type TheOwnTabAsksPlace,
+  type TheSessionsOwnState,
+} from './a_sessions_own_tab.ts'
+import { theRowAfterTheTurn } from './the_row_a_turn_writes.ts'
 import type { AUsageHost } from '../keep_what_a_session_spent/keep_what_a_session_spent.ts'
 
 /**
@@ -122,6 +131,9 @@ export const REFRESH_THIS_SESSION = 'refresh_this_session'
 
 /** What the mod asks under to say which model the session now runs on, once the host's command resolved (martha#315). */
 export const THE_MODEL_REPORT_ASK = 'note_the_model_the_session_runs'
+
+/** The words a session's own tab asks under, and the line a member's report is answered with while progress is off. */
+export { PROGRESS_REPORTING_IS_OFF, THE_OWNERS_PARK_ASK, THE_PROGRESS_SWITCH_ASK, THE_TASKS_ASK } from './a_sessions_own_tab.ts'
 
 /** What `refresh_this_session` says it is for: a member told to refresh asks for one, and hands over at its next turn's end. */
 export const CREW_REFRESH_DESCRIPTION =
@@ -316,6 +328,12 @@ export interface CrewTools extends TheReviewRule {
    */
   noteTheCallsAnswer(call: ACallAnswered, session: string): void
   /**
+   * The host said what this session still has in hand, at the end of a turn or of an agent (martha#1000, gap 8 of
+   * #957): the row's `agents` is written from it, and a row that said it was waiting or reviewing is settled again,
+   * because the work it held may be the work that just ended. Nothing is refused: the row is the crew's own bookkeeping.
+   */
+  noteTheWorkInHand(session_id: string, work: AWorkInHandReported): void
+  /**
    * The end of a running turn held at a tool boundary (martha#311, ruling D): the launcher's tool verdict asks it last,
    * so it only narrows a yes, and hands the end out on a yes to the last call in flight.
    */
@@ -431,6 +449,12 @@ interface SessionState {
    * only once the start is taken, and the record is dropped then, or dropped unmarked when the start is refused.
    */
   readonly start_hands: Map<string, AHandedWindow>
+  /**
+   * What this session's own tab keeps of its row (martha#1000, gap 8 of #957): whose progress reporting is off, the work
+   * each session has in hand, the wake-ups it scheduled, and whether a turn is running. It is the session's own facts as
+   * crew-code kept them, and ./a_sessions_own_tab decides what they make of the row.
+   */
+  readonly own: TheSessionsOwnState
 }
 
 /**
@@ -470,6 +494,7 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
     guarded: null,
     owner_needs: null,
     start_hands: new Map<string, AHandedWindow>(),
+    own: theSessionsOwnState(),
   }
   const handlers = handlersOver(held, state)
   // One budget over this launch's places (martha#513, slice 3): it reads a package's spend once per session and keeps
@@ -481,6 +506,8 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
     tools: CREW_TOOLS,
     async answer(name: string, args: Readonly<Record<string, unknown>>, from: string): Promise<CoreToolAnswer> {
       state.session = from
+      // A session whose owner turned progress reporting off takes no more of the member's own reports (martha#1000).
+      if (name === REPORT_PROGRESS_TOOL.name && state.own.progress_off.has(from)) return { answer: PROGRESS_REPORTING_IS_OFF }
       const asked = await answerAnAskOfTheMods(held, state, budget, name, args, from)
       if (asked !== undefined) return asked
       const handle = handlers[name as CrewToolName]
@@ -490,8 +517,9 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
       return handle(args)
     },
     startBeating(): () => void {
-      // A heartbeat says nothing of its own but the crew tools (martha#658): it is the row as this session last left it.
-      const beat = theBeatOverTheCrewTools(held, () => state.session, (change) => writeRow(held, state, change))
+      // A heartbeat says nothing of its own but the crew tools (martha#658): it is the row as this session last left it,
+      // re-settled between turns when what it said it waited on is gone (martha#1000, gap 8 of #957).
+      const beat = theBeatOverTheCrewTools(held, () => state.session, (change) => writeRow(held, state, (row) => theRowSettledBetweenTurns(change(row), state.own, state.session, carriesAReviewWord)))
       const timer = setInterval(() => {
         try {
           beat()
@@ -511,6 +539,8 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
     noteTheCallCounted: (session_id, own_name) => budget.noteTheCallCounted(session_id, own_name),
     ...theReviewRuleOver({ declared: () => crewOrRefusal(held), spawn: held.spawn }),
     noteTheCallsAnswer: (call, session) => held.menus?.noteTheCallsAnswer(call, session),
+    noteTheWorkInHand: (session_id, work) =>
+      theWorkInHandHeld(ownTabAsksPlace(held, state).asked, state.own, session_id, work, held.ledger.clock.now(), carriesAReviewWord),
     ends: state.ends,
     theContractInForce: (call, names) => theContractTheMemberHolds(held, call, names),
     refusesTheGitIn: async (call) => (held.refusesTheGitCall === undefined ? undefined : held.refusesTheGitCall(call)),
@@ -550,6 +580,10 @@ async function theContractTheMemberHolds(
  * The asks the mod makes on a session's behalf, never a model's: the tools to register, how often to read the channel,
  * what this session should do now, and what model it runs on. Undefined when `name` is one a member calls itself, which
  * the handlers answer.
+ *
+ * They are held in one table, keyed by the name the mod asks them under (martha#1000): the reading below stays as long
+ * however many asks the crew registers, and a later ask is one entry. The channel's two asks and the owner's tab's own
+ * are answered by name as before, after the table finds nothing.
  */
 async function answerAnAskOfTheMods(
   places: CrewToolPlaces,
@@ -559,16 +593,30 @@ async function answerAnAskOfTheMods(
   args: Readonly<Record<string, unknown>>,
   from: string,
 ): Promise<CoreToolAnswer | undefined> {
-  if (name === THE_TOOLS_ASK) return { answer: JSON.stringify(CREW_TOOLS) }
-  if (name === THE_CHANNEL_READ_ASK) return await theChannelRead(places)
-  if (name === THE_WAKE_ASK) return await theWakeOfThisSession(places, args)
+  const asks = new Map<string, () => Promise<CoreToolAnswer>>([
+    [THE_TOOLS_ASK, async () => ({ answer: JSON.stringify(CREW_TOOLS) })],
+    [THE_CHANNEL_READ_ASK, () => theChannelRead(places)],
+    [THE_WAKE_ASK, () => theWakeOfThisSession(places, args)],
+    [THE_REFRESH_ASK, () => theSessionsAct(places, state, budget, args, from)],
+    [THE_MODEL_REPORT_ASK, () => theModelReported(places, state, args)],
+    [THE_OWNERS_TODO_ASK, () => theOwnersTodoList(places, args)],
+    [THE_BUDGET_ASK, () => theBudgetAsked(places, args)],
+  ])
+  const named = asks.get(name)
+  if (named !== undefined) return await named()
   const channel = await answerAChannelAsk(places.carrier, name, args)
   if (channel !== undefined) return channel
-  if (name === THE_REFRESH_ASK) return await theSessionsAct(places, state, budget, args, from)
-  if (name === THE_MODEL_REPORT_ASK) return await theModelReported(places, state, args)
-  if (name === THE_OWNERS_TODO_ASK) return await theOwnersTodoList(places, args)
-  if (name === THE_BUDGET_ASK) return await theBudgetAsked(places, args)
-  return undefined
+  return anAskTheSessionsOwnTabMakes(ownTabAsksPlace(places, state), name, args)
+}
+
+/**
+ * What a session's own tab is answered over (martha#1000, gap 8 of #957): this member's name, the one writer of its row
+ * — the writer that owns the row's `at`, so a change this file makes never lands older than the row held — and the state
+ * the session keeps of itself.
+ */
+function ownTabAsksPlace(places: CrewToolPlaces, state: SessionState): TheOwnTabAsksPlace {
+  const asked: AnOwnTabAsked = { member: places.member, writeTheRow: (change) => writeRow(places, state, change) }
+  return { asked, own: state.own, session: state.session, park: { member: places.member, stores: places.stores, now: places.ledger.clock.now() } }
 }
 
 /** `/crew-budget` as the owner typed it at this session's tab (martha#990): the line shown, or the reviewer gauge set. */
@@ -650,37 +698,27 @@ async function theSessionsAct(
   // save may still land, and the record it leaves is what the next launch finishes.
   await closeTheGuardNoOneReported(anOrderOver(places, state))
   const act = await theRefreshAct(refreshPlacesOf(places, state), question)
+  // What the package this member's model was switched for says about its switch (martha#1000, gap 8 of #957): a release
+  // logged for it, or its landing, is the package finished, and the member comes home. Read before the order, so the
+  // same turn's order carries the member back.
+  await returnedWhenTheSwitchedPackageFinished(triggerPlaceOf(places), question)
   const ordered = theOrderOf(act)
   const switching = aSwitchMayFollow(ordered, question) ? await theModelOrder(anOrderOver(places, state)) : null
   // What the package has spent, through the one budget this launch keeps: a session's first question is where that
   // read happens, so the row costs nothing a call would not have cost anyway (martha#513, slice 3).
   const spend = theSpendOnARow(await budget.theSpendInForce(from))
-  writeRow(places, state, (row) => theRowAfterTheTurn(state, row, question, act, spend))
+  state.own.turn_running = question.turn_running
+  const may_ask = await mayPutAQuestionToTheOwner(question, () => theNudgesGoToTheOwner(places))
+  writeRow(places, state, (row) => theRowAfterTheTurn(state, row, question, act, spend, may_ask))
   return { answer: JSON.stringify(switching ?? ordered) }
 }
 
-/**
- * The row after one turn's question, in ONE write: what the session reported about itself and what the flow said it is
- * doing, because the row store keeps the newest beat and two writes in the same millisecond would lose the second.
- */
-function theRowAfterTheTurn(
-  state: SessionState,
-  row: DashboardRow,
-  question: TheSessionsQuestion,
-  act: TheAct,
-  spend: readonly AUnitOnARow[] | undefined,
-): DashboardRow {
-  return { ...row, ...(act.refresh === undefined ? {} : { refresh: act.refresh }), needs: theNeedsAfter(state, row), session: question.session_id, host: { ...row.host, contextPercent: question.percent, costUsd: question.cost_usd }, [SPEND_FIELD]: spend }
+/** Whether this crew's nudges go to its owner at all: the declaration's routing table, read at a turn's end (martha#1000). */
+async function theNudgesGoToTheOwner(places: CrewToolPlaces): Promise<boolean> {
+  const declared = await crewOrRefusal(places)
+  return !('refused' in declared) && theNudgesGoTo(declared.settings).some((name) => sameMemberName(name, declared.crew.owner))
 }
 
-/** The row's `needs` after this turn (martha#359): what the owner's file said, or its own line taken away again. */
-function theNeedsAfter(state: SessionState, row: DashboardRow): string {
-  const told = state.owner_needs
-  if (told === null) return row.needs
-  state.owner_needs = null
-  if (told.why !== '') return told.why
-  return told.before.includes(row.needs) ? '' : row.needs
-}
 
 /**
  * The line this member's session starts on: what the member's own row says it holds, and every act of that package

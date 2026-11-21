@@ -93,6 +93,7 @@ function aCrewRefusingEverything(asked: string[], git_asked: string[] = [], path
     theReviewModel: async () => null,
     // This crew hears no menu close, which is what the ask queue reads a settle on (martha#313).
     noteTheCallsAnswer: () => undefined,
+    noteTheWorkInHand: () => {},
     refusesTheSubagent: async (call) => {
       if (!CLAUDE_CODE_SUBAGENT_SPAWN.tools.includes(call.tool)) return undefined
       asked.push(call.tool)

@@ -96,6 +96,7 @@ function aCrewHolding(ends: TheEndsHold): CrewTools {
     theSpendInForce: async () => undefined,
     noteTheCallCounted: async () => undefined,
     noteTheCallsAnswer: () => undefined,
+    noteTheWorkInHand: () => {},
     refusesTheSubagent: async () => undefined,
     refusesTheGitIn: async () => undefined,
   }

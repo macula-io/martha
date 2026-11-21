@@ -109,6 +109,7 @@ function aCrewWhoseReviewsRunOnItsReviewerModel(): CrewTools {
     theReviewModelOfTheCall: async (call) => (call.tool === CLAUDE_CODE_SUBAGENT_SPAWN.tools[0] ? THE_REVIEWER_MODEL : null),
     theReviewModel: async () => THE_REVIEWER_MODEL,
     noteTheCallsAnswer: () => undefined,
+    noteTheWorkInHand: () => {},
     refusesTheSubagent: async () => undefined,
     refusesTheGitIn: async () => undefined,
   }

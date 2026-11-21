@@ -3,6 +3,7 @@
 
 import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { REFRESH_THIS_SESSION, THE_MODEL_REPORT_ASK, THE_TOOLS_ASK } from '../a_crews_tools/a_crews_tools.ts'
+import { THE_OWNERS_PARK_ASK, THE_PROGRESS_SWITCH_ASK, THE_TASKS_ASK } from '../a_crews_tools/a_sessions_own_tab.ts'
 import { VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { CARRY_THE_END } from '../end_a_running_turn/end_the_running_turn.ts'
 import { THE_NEXT_MESSAGE_ASK, THE_TURN_STARTED_ASK } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
@@ -64,6 +65,13 @@ export const COINCIDENCES: readonly Exception[] = [
   // by a literal for the same reason as the entries above.
   { value: KEEP_THE_PACKAGE_CONTRACT, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
   { value: SAY_TO_THE_CREW, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
+  // The owner's two overrides (martha#1000, gap 8 of #957) ask the launcher under the names its asks are handled by; the
+  // constants are the launcher's, and a hooks module holds them by literal for the reason above.
+  { value: THE_PROGRESS_SWITCH_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
+  { value: THE_OWNERS_PARK_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
+  // The host's own task list (martha#1000, gap 8 of #957): the mod posts the folded list to the launcher under the ask
+  // its asks are handled by, held here by literal for the reason above.
+  { value: THE_TASKS_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
   // The owner's `/crew` (martha#927) asks the launcher under the tool's own name, as the model's call of it does.
   { value: SAY_TO_THE_CREW, file: 'claude_code_relay/hooks/crew_command.ts', reason: `the tool /crew sends through; ${A_HOOKS_MODULE_CANNOT_IMPORT}` },
   // The command's name is the crew's own word, which the channel also uses for "every member": the same spelling, and

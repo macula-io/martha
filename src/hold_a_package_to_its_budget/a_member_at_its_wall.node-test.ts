@@ -113,6 +113,7 @@ function aCrewWithABudget(ledger: LedgerHost): CrewTools {
     theReviewModelOfTheCall: async () => null,
     theReviewModel: async () => null,
     noteTheCallsAnswer: () => undefined,
+    noteTheWorkInHand: () => {},
     refusesTheSubagent: async () => undefined,
     refusesTheGitIn: async () => undefined,
   } as CrewTools & { readonly places?: Places }
