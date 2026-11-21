@@ -6,7 +6,7 @@ import { test } from 'node:test'
 
 import { SOLO_MODE } from '../declare_crew/declare_crew.ts'
 import type { AKeyFileSeen } from '../read_a_members_mesh_key/read_a_members_mesh_key.ts'
-import { rosterText, theCrewsRoster, type TheRosterAsked } from './write_the_crews_roster.ts'
+import { rosterText, theKeptRoster, theCrewsRoster, type TheRosterAsked } from './write_the_crews_roster.ts'
 
 const KEYS = '/planted/keys'
 const OWNER_UID = 1234
@@ -58,4 +58,10 @@ test('#1016: a solo crew has no roster, and no key is looked at for it', () => {
   const seen: string[] = []
   assert.deepEqual(theCrewsRoster(asked({ team: false, see: (path) => (seen.push(path), null) })), { none: SOLO_MODE })
   assert.deepEqual(seen, [])
+})
+
+test('#1016: the kept roster is read back by member, a bad entry left out, and a missing or broken file is no roster', () => {
+  assert.deepEqual(theKeptRoster(''), {})
+  assert.deepEqual(theKeptRoster(JSON.stringify({ Venus: AN_ID, Terra: ANOTHER_ID.toUpperCase(), Ceres: 'not an id', Juno: 7 })), { Venus: AN_ID })
+  for (const broken of ['not json', '[]', 'null']) assert.deepEqual(theKeptRoster(broken), {}, broken)
 })

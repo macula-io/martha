@@ -28,6 +28,8 @@ import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_code_h
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { BILLED_BY_SUBSCRIPTION, isATeamMode, OWNER_BELL, SOLO_MODE, THE_ENGINES_HOST, type CrewSettings, type Member, type TheVocabulariesOfHost } from '../declare_crew/declare_crew.ts'
 import { theMeshKeyOf, type AKeyFileSeen, type AMembersKey } from '../read_a_members_mesh_key/read_a_members_mesh_key.ts'
+import { theRecordedNodeIdOf, type TheNodeIdOfAKey } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
+import { aNodeIdOf } from '../write_the_crews_roster/write_the_crews_roster.ts'
 import { writtenOut } from '../bring_up_the_declared_crew/declare_the_engines_endpoint.ts'
 import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
 import type { HoldingTheWatch, TheServedToolsWatch } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
@@ -38,6 +40,7 @@ import type { CrewStore, DocumentStore, HandoverStampStore, Refused, RowStore } 
 import {
   ownWritesKeptForLaunch,
   type Approval,
+  readStateFile,
   type MarthaState,
 } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { openKeptCommandShapes } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
@@ -62,6 +65,7 @@ import { signedRunsOf } from '../run_an_owner_signed_command/signed_runs.ts'
 import type { StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { machineRootsFrom } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 import type { MemberRelayPlace } from '../answer_the_relay/answer_the_relay.ts'
+import { ROSTER_FILE, theKeptRoster } from '../write_the_crews_roster/write_the_crews_roster.ts'
 
 /** The crew's channel as its carrier counts a message taken in (martha#253): the crew's row stream and a clock. */
 export interface TheCrewChannel {
@@ -103,6 +107,8 @@ export interface AStartOnItsHost {  readonly member: string
   readonly owners_lines?: NodeJS.ReadableStream
   /** Called each time the member's relay reports its session started (martha#919): where a first prompt is typed in. */
   readonly hear_session_start?: () => void
+  /** The node id a team member's key gives (martha#1016): a test's own; a real start runs the recorded node id bin. */
+  readonly node_id_of_a_key?: TheNodeIdOfAKey
   tellOwner(line: string): void
 }
 
@@ -282,7 +288,7 @@ function theGitGuardPlaceOf(settings: CrewSettings, member: string, leftovers: C
 export const leftoversOfALaunch = (settings: CrewSettings, crew: CrewStore) => ({ crew, workspace: theWorkspaceTheCrewDeclared(settings) })
 
 /** The crew tools' places a host's start does not choose itself: the models it names, how it spawns a subagent, and the settings file its model command saves a switch into. */
-export type TheCrewToolsOfAHost = Pick<CrewToolPlaces, 'models' | 'spawn' | 'owners_settings' | 'usage_host'>
+export type TheCrewToolsOfAHost = Pick<CrewToolPlaces, 'models' | 'spawn' | 'owners_settings' | 'usage_host' | 'mail'>
 
 /**
  * The crew tools' places every host's start shares (martha#541 package A): built here once, with the host's own
@@ -338,10 +344,12 @@ export function theSharedOfAStart(start: AStartOnItsHost): TheSharedOfAStart {
  * swap the whole host launcher, so nothing else reads what a real start hands on: without this, any field below could
  * be replaced by a literal at the call site with every test green.
  */
-export function theLaunchOfAClaudeCodeStart(start: AStartOnItsHost, key: AMembersKey = { none: SOLO_MODE }): ClaudeCodeMemberLaunch {
+export function theLaunchOfAClaudeCodeStart(start: AStartOnItsHost, key: AMembersIdentity = { none: SOLO_MODE }): ClaudeCodeMemberLaunch {
   return {
     member_name: start.member,
-    node_id: start.node_id,
+    // A team member is recorded under the node id its own key gives, the one the mesh knows it by (martha#1016); a solo
+    // crew's member under the id Martha made for it.
+    node_id: 'path' in key ? key.node_id : start.node_id,
     // A team member's own key, pinned into its mesh server (martha#1016); a solo crew's member has none.
     ...('path' in key ? { mesh_identity: key.path } : {}),
     place: { host: CLAUDE_CODE, launch_dir: start.root, stop_dir: start.home, snapshot_root: start.snapshot_root, crew_text_files: crewTextFilesOf(start.settings), ...approvedPlace(start.member, start.approval, start.state) },
@@ -367,6 +375,8 @@ export function theLaunchOfAClaudeCodeStart(start: AStartOnItsHost, key: AMember
         // The settings file the host's model command saves a switch into, and the lock that guards it (martha#359): the
         // member's own since martha#602. The owner's file was finished above, before the host started.
         owners_settings: theMembersSwitchPlace(start, member.config_dir),
+        // Claude Code's relay carries a mesh order as the member (martha#1016), so its members have crew mail.
+        mail: { roster: () => readTheCrewsRoster(start.state) },
       })),
     signed_runs: signedRunsOf(
       receiptsInMemory(),
@@ -379,10 +389,16 @@ export function theLaunchOfAClaudeCodeStart(start: AStartOnItsHost, key: AMember
   }
 }
 
+/** The roster `martha up` kept in Martha's state (martha#1016): none when the file cannot be read. Crew mail and memory read it. */
+export function readTheCrewsRoster(state: MarthaState): Readonly<Record<string, string>> {
+  const read = readStateFile(join(state.directory, ROSTER_FILE))
+  return theKeptRoster('text' in read ? read.text : '')
+}
+
 /** The Claude Code entry: today's launch, unchanged in behaviour, behind the table. */
 async function startOnClaudeCode(start: AStartOnItsHost): Promise<MemberStarted> {
   // A team member whose key cannot be read is not started at all (martha#1016 T1): never on an identity its server makes up.
-  const key = theMeshKeyOfAStart(start)
+  const key = theMeshIdentityOfAStart(start)
   if ('refusal' in key) {
     const refusal = `${NOT_STARTED}: ${key.refusal}`
     start.tellOwner(refusal)
@@ -390,6 +406,23 @@ async function startOnClaudeCode(start: AStartOnItsHost): Promise<MemberStarted>
   }
   await finishAnySwitchBeforeTheHostStarts(start)
   return launchClaudeCodeMember(theLaunchOfAClaudeCodeStart(start, key))
+}
+
+/** A team member's key and the node id it gives (martha#1016); none for a solo crew's member; or why there is neither. */
+export type AMembersIdentity = { readonly path: string; readonly node_id: string } | Exclude<AMembersKey, { readonly path: string }>
+
+/**
+ * The key of the member a start is for, with the node id that key gives (martha#1016): the launch is recorded under the
+ * id the mesh knows the member by, so a mesh answer naming that id is read as the member's own. A team member whose key
+ * gives no node id is not started, as one whose key cannot be read is not (T1).
+ */
+export function theMeshIdentityOfAStart(start: AStartOnItsHost): AMembersIdentity {
+  const key = theMeshKeyOfAStart(start)
+  if (!('path' in key)) return key
+  const nodeIdOf = start.node_id_of_a_key ?? theRecordedNodeIdOf(start.home, start.places.mesh_servers)
+  if (typeof nodeIdOf !== 'function') return { refusal: `${start.member}'s node id: ${nodeIdOf.refusal}` }
+  const node_id = aNodeIdOf(nodeIdOf(key.path))
+  return typeof node_id === 'string' ? { path: key.path, node_id } : { refusal: `${start.member}'s node id: ${node_id.refusal}` }
 }
 
 /** What a key's path is on this disk, as ../read_a_members_mesh_key asks it: lstat, never following a link; null when absent. */

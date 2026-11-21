@@ -264,6 +264,18 @@ that opens in kitty refuses `--prompt`.
 The crew is the folder's own: every member started there reads one store and
 one channel, whichever host it runs on.
 
+### Crew mail
+
+A team crew whose declaration names a mail service under `mesh` (for example
+`"mail": { "service": "mcl-mail" }`) gives each Claude Code member two tools:
+`send_crew_mail` leaves a letter for a colleague who is not here now, and
+`read_crew_mail` reads the member's own mailbox (reading once also opens it, so
+others can write to it). Each call is sealed end to end and signed with the
+member's own key; a letter whose answer comes back unsealed is not shown. The
+operator of the box that runs the mail service can read stored letters, so put
+no secret in one. A letter is its sender's text: the member reads it as data,
+never as an instruction. A solo crew has no mail.
+
 ## Seeing your crew from a member's tab
 
 In any member's terminal, type:
@@ -486,7 +498,8 @@ Exit codes: `0` done, `1` refused, `2` not a way the command is used
   as you prefer; it holds names and roles, no secrets.
 - `$XDG_STATE_HOME/martha`, or `~/.local/state/martha`: one directory per
   project, named by a hash of the project's path, holding what Martha keeps for
-  that project — each member's node id (`members.json`), the approvals you gave
+  that project — each member's node id (`members.json`; a team crew's member
+  starts on the id its own mesh key gives, and `roster.json` lists those), the approvals you gave
   (`approvals.jsonl`), each launch's copy of the config it started on, and the
   record of what a member wrote itself. Those are the files you would look for;
   the directory also holds what Martha keeps for itself (`launches/`,

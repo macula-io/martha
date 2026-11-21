@@ -38,7 +38,7 @@ import { GITHUB_WHEN_UNNAMED } from '../declare_crew/the_crews_github.ts'
 import { TRANSCRIPTS_WHEN_UNNAMED } from '../declare_crew/the_crews_transcripts.ts'
 import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
 import { CLOCK_ZONE_WHEN_UNNAMED } from '../declare_crew/the_crews_clock_zone.ts'
-import { NO_MESH_KEYS, WHERE_A_CREW_OPENS_WHEN_UNNAMED } from '../declare_crew/the_crews_workspace.ts'
+import { NO_MESH, NO_MESH_KEYS, WHERE_A_CREW_OPENS_WHEN_UNNAMED } from '../declare_crew/the_crews_workspace.ts'
 import { REPORT_WHERE_THE_WORK_STANDS } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { TAKE_ASKS } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { SWITCH_YOUR_MODEL } from '../switch_a_members_model/the_switch_tools.ts'
@@ -78,6 +78,7 @@ const settingsOf = (overrides: { readonly practice?: boolean; readonly mode?: st
     clock_zone: CLOCK_ZONE_WHEN_UNNAMED,
     opens: WHERE_A_CREW_OPENS_WHEN_UNNAMED,
     mesh_keys: NO_MESH_KEYS,
+    ...NO_MESH,
   }
 }
 

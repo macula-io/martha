@@ -48,6 +48,7 @@ import { RETURN_TO_YOUR_OWN_MODEL_TOOL, SWITCH_YOUR_MODEL_TOOL } from '../switch
 import { WRITE_MY_HANDOVER_SCHEMA } from '../write_my_handover/the_handover_tool.ts'
 import { WORKTREE_FINISH_TOOL, WORKTREE_OPEN_TOOL } from '../open_and_finish_a_worktree/the_worktree_tools.ts'
 import { WAIT_FOR_CI_TOOL } from '../wait_for_ci/the_ci_wait_tool.ts'
+import { READ_CREW_MAIL_TOOL, SEND_CREW_MAIL_TOOL } from '../exchange_crew_mail/the_mail_tools.ts'
 import { CREW_TOOL_NAMES, REFRESH_THIS_SESSION, crewToolsOver, type CrewTools } from './a_crews_tools.ts'
 
 const home = mkdtempSync(join(tmpdir(), 'martha-every-act-'))
@@ -210,6 +211,8 @@ const EVERY_CREW_TOOL: Readonly<Record<string, ALedgerLine>> = {
   [STANDING_CLOSE_TOOL.name]: { asks: ['assign_work'] },
   [STANDING_TOOL.name]: { ungated: 'reads the standing items' },
   [WAIT_FOR_CI_TOOL.name]: { ungated: 'reads CI runs; it changes nothing' },
+  [SEND_CREW_MAIL_TOOL.name]: { ungated: "leaves a letter in a colleague's mailbox, signed by the member's own key; it changes none of the crew's state" },
+  [READ_CREW_MAIL_TOOL.name]: { ungated: "reads the member's own mailbox" },
   [RELEASE_THE_FILES_TOOL.name]: { ungated: "releases paths the caller's own record holds as leftovers, after the caller has looked at them; it writes only the caller's own release list" },
 }
 

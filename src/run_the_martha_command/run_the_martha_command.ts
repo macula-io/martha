@@ -36,7 +36,7 @@ import { ADD, aChangedDeclaration, REMOVE, theChangeTold, theCrewChangeAsked, ty
 import { writeAChangedDeclaration } from '../declare_a_solo_crew/write_a_changed_declaration.ts'
 import { placeOfAWrittenKey, seeAKeyFileOnDisk, THE_VOCABULARIES_OF_HOST } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
 import { theCrewsRoster, ROSTER_FILE, rosterText, type TheRosterAsked } from '../write_the_crews_roster/write_the_crews_roster.ts'
-import { NODE_ID_BIN, startOfARecordedBin } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
+import { theRecordedNodeIdOf } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
@@ -446,19 +446,6 @@ export interface TheRosterWrite {
   /** The node id a key gives; by default the recorded `macula-mcp-node-id`, started confined with that key alone. */
   readonly nodeIdOf?: TheRosterAsked['nodeIdOf'] | { readonly refusal: string }
   readonly see?: TheRosterAsked['see']
-}
-
-/** How long the node id bin may take for one key: it reads a file and prints a line. */
-const A_NODE_ID_TAKES_MS = 15_000
-
-/** The recorded node id bin, run on one key with nothing of the owner's environment but PATH and HOME; or why it cannot start. */
-function theRecordedNodeIdOf(home: string, mesh_servers: string): TheRosterAsked['nodeIdOf'] | { readonly refusal: string } {
-  const start = startOfARecordedBin({ bin: NODE_ID_BIN, root: mesh_servers })
-  if ('refusal' in start) return start
-  return (path) => {
-    const run = spawnSync(start.command, [...start.args], { encoding: 'utf8', timeout: A_NODE_ID_TAKES_MS, env: { PATH: process.env['PATH'] ?? '', HOME: home, MACULA_MCP_IDENTITY: path } })
-    return run.status === 0 ? { id: run.stdout } : { refusal: `${NODE_ID_BIN} gave no node id (${run.error?.message ?? run.stderr.trim().slice(0, 200)})` }
-  }
 }
 
 /**

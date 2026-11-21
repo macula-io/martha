@@ -42,7 +42,7 @@ import { GITHUB_WHEN_UNNAMED } from '../declare_crew/the_crews_github.ts'
 import { TRANSCRIPTS_WHEN_UNNAMED } from '../declare_crew/the_crews_transcripts.ts'
 import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
 import { CLOCK_ZONE_WHEN_UNNAMED } from '../declare_crew/the_crews_clock_zone.ts'
-import { NO_MESH_KEYS, WHERE_A_CREW_OPENS_WHEN_UNNAMED } from '../declare_crew/the_crews_workspace.ts'
+import { NO_MESH, NO_MESH_KEYS, WHERE_A_CREW_OPENS_WHEN_UNNAMED } from '../declare_crew/the_crews_workspace.ts'
 
 /** The member these tools answer for, and the branch prefix its worktrees carry. */
 const MEMBER = 'Ceres'
@@ -127,6 +127,7 @@ const settingsFor = (fixture: Fixture, places: { readonly clones: string | null;
     clock_zone: CLOCK_ZONE_WHEN_UNNAMED,
     opens: WHERE_A_CREW_OPENS_WHEN_UNNAMED,
     mesh_keys: NO_MESH_KEYS,
+    ...NO_MESH,
 })
 
 /** A real git, so a test sees what git does rather than what a stand-in is told to say. */

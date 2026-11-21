@@ -106,6 +106,7 @@ import { theBeatOverTheCrewTools, theBeatsMarkedOn, withTheOwedLine, withTheTime
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { theRootsInForce } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 import { WAIT_FOR_CI_TOOL, theCiWaitACallNames, theCiWaitOver } from '../wait_for_ci/the_ci_wait_tool.ts'
+import { READ_CREW_MAIL_TOOL, SEND_CREW_MAIL_TOOL, THE_MAIL_STEP_ASK, theMailPlaceOf, theMailStepAnswer, theMailToolAnswer, type AMailCarrier } from '../exchange_crew_mail/the_mail_tools.ts'
 import { WRITE_MY_HANDOVER_SCHEMA, theHandoverToolOver } from '../write_my_handover/the_handover_tool.ts'
 import { NO_MODEL_NAMED, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import type { AUsageHost } from '../keep_what_a_session_spent/keep_what_a_session_spent.ts'
@@ -188,6 +189,11 @@ export interface CrewToolPlaces extends Pick<TheWindowPlaces, 'served_tools'> {
   readonly lifecycle?: StoppingHost
   /** The crew's declaration, whose workspace places the two worktree tools read (martha#256). */
   readonly settings?: CrewSettings
+  /**
+   * What a host that carries a mesh order hands crew mail (martha#1016): the roster, read when a tool is called. A launch
+   * given none has no mailbox, and each mail tool says why.
+   */
+  readonly mail?: AMailCarrier
   /**
    * The models the host runs, as its adapter records them (martha#315): the declaration is read back against them, so a
    * crew whose `review_model` the host cannot spell is refused by name. A place given none names no model, and a
@@ -385,6 +391,8 @@ const THE_TOOLS = [
   STANDING_CLOSE_TOOL,
   STANDING_TOOL,
   WAIT_FOR_CI_TOOL,
+  SEND_CREW_MAIL_TOOL,
+  READ_CREW_MAIL_TOOL,
 ] as const
 
 /** The names the crew's tools are registered under, and the only ones the launcher answers. */
@@ -564,7 +572,14 @@ async function answerAnAskOfTheMods(
   if (name === THE_MODEL_REPORT_ASK) return await theModelReported(places, state, args)
   if (name === THE_OWNERS_TODO_ASK) return await theOwnersTodoList(places, args)
   if (name === THE_BUDGET_ASK) return await theBudgetAsked(places, args)
+  if (name === THE_MAIL_STEP_ASK) return await theMailStep(places, args)
   return undefined
+}
+
+/** A crew mail step the relay carried (martha#1016): the next order of a read, or the words the model is shown. */
+async function theMailStep(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
+  const settings = await theSettingsOrRefusal(places)
+  return 'refused' in settings ? settings : { answer: theMailStepAnswer(theMailPlaceOf(settings, places.mail), args) }
 }
 
 /** `/crew-budget` as the owner typed it at this session's tab (martha#990): the line shown, or the reviewer gauge set. */
@@ -871,6 +886,8 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [STANDING_ADD_TOOL.name]: declaring(places, async (declared, args) => keepTheStandingItems(theStandingAsked(places, declared.settings), () => recordAStandingItem(places.ledger, args, places.member))),
     [STANDING_CLOSE_TOOL.name]: declaring(places, async (declared, args) => keepTheStandingItems(theStandingAsked(places, declared.settings), () => closeAStandingItem(places.ledger, args, places.member))),
     [STANDING_TOOL.name]: async () => theStandingToolOver({ ledger: places.ledger, now: places.ledger.clock.now() }),
+    [SEND_CREW_MAIL_TOOL.name]: declaring(places, async (declared, args) => ({ answer: theMailToolAnswer(theMailPlaceOf(declared.settings, places.mail), SEND_CREW_MAIL_TOOL.name, args) })),
+    [READ_CREW_MAIL_TOOL.name]: declaring(places, async (declared, args) => ({ answer: theMailToolAnswer(theMailPlaceOf(declared.settings, places.mail), READ_CREW_MAIL_TOOL.name, args) })),
     [WAIT_FOR_CI_TOOL.name]: namedThenDeclaring(places, theCiWaitACallNames, async (declared, named) =>
       actingOn(named, (on, asked) => theCiWaitOver(theGithubSpenderOf({ stores: on.stores, root: on.root, processes: on.processes, clock: on.ledger.clock, github: declared.settings.github, clock_zone: declared.settings.clock_zone }), asked)),
     ),
