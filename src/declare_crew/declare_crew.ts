@@ -140,8 +140,16 @@ export const APPROVE_LANDING = 'approve_landing'
  */
 export const HOLD_REVIEWS = 'hold_reviews'
 
+/**
+ * The act that lets one session close another member's worktree or branch (martha#962): the member closes its own
+ * without it, and the role the table grants this act closes a member's when that member has said the package is
+ * closed — the word the caller gives as `owner_ok`. An act and not a role name, for the same reason `HOLD_REVIEWS`
+ * is one: roles are the crew's own words.
+ */
+export const FINISH_A_MEMBERS_WORKTREE = 'finish_a_members_worktree'
+
 /** The acts a mode's table assigns, in business words. */
-export const ACTS = ['assign_work', APPROVE_LANDING, 'resume_parked_work', OFFER_OWNER_ASKS, RESTART_MEMBER, HOLD_REVIEWS] as const
+export const ACTS = ['assign_work', APPROVE_LANDING, 'resume_parked_work', OFFER_OWNER_ASKS, RESTART_MEMBER, HOLD_REVIEWS, FINISH_A_MEMBERS_WORKTREE] as const
 export type Act = (typeof ACTS)[number]
 
 /**
@@ -763,6 +771,7 @@ function theTeamTable(): Mode {
     [OFFER_OWNER_ASKS]: [TEAM_SUPERVISOR_ROLE],
     [RESTART_MEMBER]: [TEAM_SUPERVISOR_ROLE],
     [HOLD_REVIEWS]: [SOLO_REVIEWER_ROLE],
+    [FINISH_A_MEMBERS_WORKTREE]: [TEAM_SUPERVISOR_ROLE],
   }
   return { name: TEAM_MODE, roles, may }
 }

@@ -17,7 +17,7 @@ import { theRangeACallNames, VERIFY_RANGE, verifyRange } from '../check_a_range_
 import { crewToolsIn } from '../claude_code_relay/hooks/crew_tools_answer.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { SOLO_MODE } from '../declare_crew/declare_crew.ts'
-import { CLONES, DASHBOARD, DECLARATION_DIRECTORY, DECLARATION_FILE, HANDOVER_CEILING_MINUTES_WHEN_UNNAMED, HOLD_REVIEWS, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER, THE_HOST_A_MEMBER_RAN_ON, WORKTREES, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { CLONES, DASHBOARD, DECLARATION_DIRECTORY, DECLARATION_FILE, HANDOVER_CEILING_MINUTES_WHEN_UNNAMED, FINISH_A_MEMBERS_WORKTREE, HOLD_REVIEWS, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER, THE_HOST_A_MEMBER_RAN_ON, WORKTREES, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { HostContract, ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -117,7 +117,7 @@ function settingsUnder(root: string, places: { readonly clones: string | null; r
     owner: 'Ann',
     host: THE_HOST_A_MEMBER_RAN_ON,
     members: [{ name: MEMBER, role: 'builder', model: null, host: null, parked: false, billing: null }],
-    mode: { name: SOLO_MODE, roles: ['builder'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], [OFFER_OWNER_ASKS]: [OWNER], [RESTART_MEMBER]: [OWNER], [HOLD_REVIEWS]: [OWNER] } },
+    mode: { name: SOLO_MODE, roles: ['builder'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], [OFFER_OWNER_ASKS]: [OWNER], [RESTART_MEMBER]: [OWNER], [HOLD_REVIEWS]: [OWNER], [FINISH_A_MEMBERS_WORKTREE]: [OWNER] } },
     house_rules: {
       owner_items: false,
       workspace_layout: true,
