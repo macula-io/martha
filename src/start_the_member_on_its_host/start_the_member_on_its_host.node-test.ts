@@ -5,6 +5,7 @@
 // start call asks the table, and the declarations here are made in memory, so nothing is written where a test would
 // have to clean it up.
 
+import { randomBytes } from 'node:crypto'
 import assert from 'node:assert/strict'
 import { chmodSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -42,6 +43,7 @@ import {
   noLauncherFor,
   theLaunchOfAClaudeCodeStart,
   placeOfAWrittenKey,
+  theMeshIdentityOfAStart,
   theMeshKeyOfAStart,
   theStartOfAHost,
   theStartOfAMember,
@@ -398,10 +400,37 @@ test("#1016 T1: a team member whose key cannot be read is not started, and the o
   assert.deepEqual(told, [!started.started ? started.refusal : ''])
 })
 
+/** A node id no planted start carries, as a key's bin would print it: fresh for each call, so it equals nothing else. */
+const aFreshNodeId = (): string => randomBytes(32).toString('hex')
+
 test("#1016: a team member's key reaches its launch, and a solo crew's member's launch carries none", (t) => {
   const { start, folder } = aTeamStart(t, { [keyOf(PLANTED.member)]: 0o600, [keyOf(PLANTED.another_member)]: 0o600 })
-  assert.equal(theLaunchOfAClaudeCodeStart(start, theMeshKeyOfAStart(start)).mesh_identity, join(folder, keyOf(PLANTED.member)))
+  const theKeys = aFreshNodeId()
+  const team = { ...start, node_id_of_a_key: () => ({ id: `${theKeys.toUpperCase()}\n` }) }
+  assert.equal(theLaunchOfAClaudeCodeStart(team, theMeshIdentityOfAStart(team)).mesh_identity, join(folder, keyOf(PLANTED.member)))
   const solo = aPlantedStart(t)
-  assert.deepEqual(theMeshKeyOfAStart(solo), { none: SOLO_MODE })
-  assert.equal(Object.hasOwn(theLaunchOfAClaudeCodeStart(solo, theMeshKeyOfAStart(solo)), 'mesh_identity'), false)
+  assert.deepEqual(theMeshIdentityOfAStart(solo), { none: SOLO_MODE })
+  assert.equal(Object.hasOwn(theLaunchOfAClaudeCodeStart(solo, theMeshIdentityOfAStart(solo)), 'mesh_identity'), false)
+  assert.equal(theLaunchOfAClaudeCodeStart(solo, theMeshIdentityOfAStart(solo)).node_id, solo.node_id)
+})
+
+test("#1016: a team member's launch is recorded under the node id its own key gives, not the id Martha made", (t) => {
+  const { start, folder } = aTeamStart(t, { [keyOf(PLANTED.member)]: 0o600 })
+  const theKeys = aFreshNodeId()
+  const asked: string[] = []
+  const team = { ...start, node_id_of_a_key: (path: string) => (asked.push(path), { id: `${theKeys}\n` }) }
+  const identity = theMeshIdentityOfAStart(team)
+  assert.deepEqual(identity, { path: join(folder, keyOf(PLANTED.member)), node_id: theKeys })
+  assert.deepEqual(asked, [join(folder, keyOf(PLANTED.member))], 'the bin was not asked about this member\'s own key')
+  assert.equal(theLaunchOfAClaudeCodeStart(team, identity).node_id, theKeys)
+})
+
+test("#1016: a team member whose key gives no node id is not started, and the owner is told why by name", async (t) => {
+  const { start } = aTeamStart(t, { [keyOf(PLANTED.member)]: 0o600 })
+  const told: string[] = []
+  const started = await THE_LAUNCHERS_OF_HOST[CLAUDE_CODE]!.start({ ...start, node_id_of_a_key: () => ({ id: 'not an id' }), tellOwner: (line) => void told.push(line) })
+  assert.ok(!started.started && started.refusal.startsWith(`${NOT_STARTED}: ${PLANTED.member}'s node id: the key gave no node id`), JSON.stringify(started))
+  assert.deepEqual(told, [!started.started ? started.refusal : ''])
+  const unstarted = await THE_LAUNCHERS_OF_HOST[CLAUDE_CODE]!.start({ ...start, node_id_of_a_key: () => ({ refusal: 'the bin stopped' }), tellOwner: () => {} })
+  assert.ok(!unstarted.started && unstarted.refusal === `${NOT_STARTED}: ${PLANTED.member}'s node id: the bin stopped`, JSON.stringify(unstarted))
 })

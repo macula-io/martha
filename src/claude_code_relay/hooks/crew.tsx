@@ -10,6 +10,8 @@
 // socket in the environment and the shapes in ./relay_protocol.ts are all this file knows.
 
 import { crewToolsIn, type ALaunchersTool } from './crew_tools_answer.ts'
+import { carryAMeshOrder } from './carry_a_mesh_order.ts'
+import type { MeshCallEngine } from './call_the_mesh_as_the_member.ts'
 import { heardToolAnswer, PANE, RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from './relay_protocol.ts'
 import { theCrewCommandAnswers, theCrewCommandResult, type Heard } from './crew_command.ts'
 import { readingTheChannelWith } from './crew_channel_reading.ts'
@@ -31,6 +33,8 @@ interface CrewEngine {
   /** Ends a running turn by its id (martha#311); the host rejects when that turn is not the one running. */
   readonly turn: { abort(input: { readonly turnId: string }): Promise<unknown> }
   readonly tool: { register(tool: ALaunchersTool & { description: string }): Promise<unknown> }
+  /** Calls a connected server as this session (martha#1016): a crew tool's mesh order is carried through it. */
+  readonly mcp: MeshCallEngine['mcp']
   /** `run` runs one of the host's own commands in this session: the refresh flow's clear is that one (martha#255). */
   readonly command: { register(command: { name: string; description: string; argumentHint?: string }): Promise<unknown>; run(command: { command: string; args?: string }): Promise<unknown> }
   /**
@@ -309,6 +313,15 @@ const answerFromTheLauncher = async ($: CrewEngine, e: Record<string, unknown>, 
   return { result: await askTheLauncher($, tool, args) }
 }
 
+/**
+ * One tool's hook whose answer may be a mesh order (martha#1016): the launcher's answer is carried by carryAMeshOrder,
+ * each call made as the member through its own mesh server, and each answer asked of the tool the order names.
+ */
+const answerWithAMeshOrder = async ($: CrewEngine, e: Record<string, unknown>, tool: string): Promise<unknown> => {
+  const { tool: _tool, agentId: _agent, tool_use_id: _use, ...args } = e
+  return { result: await carryAMeshOrder($, await askTheLauncher($, tool, args), (then, asked) => askTheLauncher($, then, asked)) }
+}
+
 // Each hook is a named function, never a call returning one: the host's plugin validator refuses a hook that is
 // "not a function literal or the name of one", and refuses a tool named by anything but a string literal.
 const answerReportProgress = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'report_where_the_work_stands')
@@ -343,6 +356,8 @@ const answerStandingAdd = ($: CrewEngine, e: Record<string, unknown>): Promise<u
 const answerStandingClose = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'standing_close')
 const answerStanding = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'standing')
 const answerWaitForCi = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'wait_for_ci')
+const answerSendCrewMail = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerWithAMeshOrder($, e, 'send_crew_mail')
+const answerReadCrewMail = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerWithAMeshOrder($, e, 'read_crew_mail')
 const answerReleaseTheFiles = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'release_the_files_a_killed_run_left')
 
 /** The owner's `/crew` (martha#927): what follows the name, asked of the launcher as the model's own calls are. */
@@ -396,6 +411,22 @@ async function registerTheCommands($: CrewEngine): Promise<void> {
   await $.command.register({ name: BUDGET_COMMAND, description: "Show the crew's budget, or set the reviewer model's gauge", argumentHint: '[<reviewer model> <percent>|off]' })
 }
 
+/** The owner's own commands at a member's tab, each answered here and shown to the owner alone. */
+function hookTheOwnersCommands(on: (event: string, options?: unknown, handler?: unknown) => unknown): void {
+  // The owner's `/crew` (martha#927): answered here without `next`, so no command runs beneath it, and shown to the
+  // owner alone, so the model takes no turn. What it asks and prints is ./crew_command.ts's.
+  on('command.run', { command: CREW_COMMAND }, answerTheCrewCommand)
+
+  // The owner's `/crew-budget` (martha#990): shown to the owner alone, as `/crew` is.
+  on('command.run', { command: BUDGET_COMMAND }, answerTheBudgetCommand)
+}
+
+/** The tools whose answer is a mesh order this mod carries as the member (martha#1016), each named in full as below. */
+function registerTheMeshOrderTools(on: (event: string, options?: unknown, handler?: unknown) => unknown): void {
+  on('tool.call', { tool: 'mcp__martha__send_crew_mail' }, answerSendCrewMail)
+  on('tool.call', { tool: 'mcp__martha__read_crew_mail' }, answerReadCrewMail)
+}
+
 /** The crew's tools registered with this host, and the pane drawn. */
 export const register = (on: (event: string, options?: unknown, handler?: unknown) => unknown): void => {
   // Every tool is named in full here, because the host refuses a hook that builds its name; the manifest holds the
@@ -432,6 +463,7 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   on('tool.call', { tool: 'mcp__martha__standing_close' }, answerStandingClose)
   on('tool.call', { tool: 'mcp__martha__standing' }, answerStanding)
   on('tool.call', { tool: 'mcp__martha__wait_for_ci' }, answerWaitForCi)
+  registerTheMeshOrderTools(on)
   on('tool.call', { tool: 'mcp__martha__release_the_files_a_killed_run_left' }, answerReleaseTheFiles)
 
   // The pane's own command opens it and answers nothing: the drawing is `ui.render`'s (martha#313).
@@ -439,12 +471,7 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
 
   on('ui.render', { component: 'Pane', requestId: PANE }, drawThePane)
 
-  // The owner's `/crew` (martha#927): answered here without `next`, so no command runs beneath it, and shown to the
-  // owner alone, so the model takes no turn. What it asks and prints is ./crew_command.ts's.
-  on('command.run', { command: CREW_COMMAND }, answerTheCrewCommand)
-
-  // The owner's `/crew-budget` (martha#990): shown to the owner alone, as `/crew` is.
-  on('command.run', { command: BUDGET_COMMAND }, answerTheBudgetCommand)
+  hookTheOwnersCommands(on)
 
   // Registration happens once this host shows the session, as the tools are the launcher's to name; the pane opens
   // by itself only when the crew's declaration switched the dashboard on.

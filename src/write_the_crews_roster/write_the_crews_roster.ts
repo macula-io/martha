@@ -32,7 +32,7 @@ export interface TheRosterAsked extends TheKeysAsked {
 export type TheRoster = { readonly ids: Readonly<Record<string, string>>; readonly left_out: readonly string[] } | { readonly none: typeof SOLO_MODE }
 
 /** The node id the key gives, when it is one: 64 hex digits, written lowercase, as the mesh keys them. */
-function aNodeIdOf(said: { readonly id: string } | { readonly refusal: string }): string | { readonly refusal: string } {
+export function aNodeIdOf(said: { readonly id: string } | { readonly refusal: string }): string | { readonly refusal: string } {
   if ('refusal' in said) return said
   const id = said.id.trim()
   return NODE_ID.test(id) ? id.toLowerCase() : { refusal: `the key gave no node id (${JSON.stringify(id.slice(0, 80))})` }

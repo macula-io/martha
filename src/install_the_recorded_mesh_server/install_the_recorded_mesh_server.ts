@@ -405,6 +405,25 @@ export function startOfARecordedBin(asked: ARecordedBinStart): { readonly comman
   return { command: process.execPath, args: confinedStart(proved.dir, file) }
 }
 
+/** How long the node id bin may take for one key: it reads a file and prints a line. */
+const A_NODE_ID_TAKES_MS = 15_000
+
+/** The node id the key at a path gives, as NODE_ID_BIN prints it, or why there is none. */
+export type TheNodeIdOfAKey = (path: string) => { readonly id: string } | { readonly refusal: string }
+
+/**
+ * The recorded NODE_ID_BIN, run on one key with nothing of the owner's environment but PATH and HOME (martha#1016): the
+ * roster's node ids, and a team member's launch's own. Or why it cannot start.
+ */
+export function theRecordedNodeIdOf(home: string, root: string): TheNodeIdOfAKey | { readonly refusal: string } {
+  const start = startOfARecordedBin({ bin: NODE_ID_BIN, root })
+  if ('refusal' in start) return start
+  return (path) => {
+    const run = spawnSync(start.command, [...start.args], { encoding: 'utf8', timeout: A_NODE_ID_TAKES_MS, env: { PATH: process.env['PATH'] ?? '', HOME: home, [IDENTITY_SETTING]: path } })
+    return run.status === 0 ? { id: run.stdout } : { refusal: `${NODE_ID_BIN} gave no node id (${run.error?.message ?? run.stderr.trim().slice(0, 200)})` }
+  }
+}
+
 // --- recording a version's tree --------------------------------------------------
 
 export interface MeshTreeRecordRequest {
