@@ -43,6 +43,12 @@ export interface MessageCarrier {
    * subagent's turn (one that carries an `agentId`) counts nothing. Gives back the framed text this turn took in, or
    * null when it took none in: the one decision the launcher's record of the turn follows (martha#440). */
   aTurnStarted(agentId?: unknown): Promise<string | null>
+  /**
+   * Whether a message for this member is waiting: one handed and not taken in yet, or one the channel holds for it. Asked
+   * before a wake is handed (martha#959), because a turn that starts for the wake's text is the turn the carrier counts
+   * a handed message taken in at — and that message would then be counted and never read.
+   */
+  waiting(): Promise<boolean>
 }
 
 export interface CarryingTo {
@@ -81,6 +87,11 @@ export function carryingTo(input: CarryingTo): MessageCarrier {
         handed = waiting
         return null
       }
+    },
+    async waiting(): Promise<boolean> {
+      if (handed !== null) return true
+      const [taken, messages] = await Promise.all([takenInBy(input.host, input.member), readTheChannel(input.host)])
+      return messages.some(({ position, message }) => !taken.has(position) && forThisMember(message, input.member))
     },
   }
 }
