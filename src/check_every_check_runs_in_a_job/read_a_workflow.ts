@@ -23,6 +23,10 @@ export interface Job {
   readonly lines: readonly string[]
   /** The value of every step written on one line, `run: <command>`: what the job runs. A `run: |` block is not one. */
   readonly steps: readonly string[]
+  /** What the job writes after `timeout-minutes:` at its own depth, or undefined when it writes none (martha#992). */
+  readonly timeoutMinutes: string | undefined
+  /** Whether the job calls a reusable workflow (`uses:` at its own depth): GitHub then refuses it a timeout (martha#992). */
+  readonly callsAWorkflow: boolean
 }
 
 /** A workflow, read. */
@@ -42,6 +46,10 @@ const JOB_HEADER = /^ {2}([A-Za-z0-9_-]+):\s*(?:#.*)?$/
 const UNDER_A_KEY = /^ {3,}\S/
 const FILTER = /^\s+(paths|paths-ignore)\s*:/
 const ONE_LINE_RUN = /^\s+(?:- )?run:\s*([^|>\s].*?)\s*$/
+/** A job's own `timeout-minutes`, at the four spaces a key of a job's block sits at: a step's is at eight. */
+const TIMEOUT = /^ {4}timeout-minutes:\s*(\S*)/
+/** A job's own `uses:`: it calls a reusable workflow rather than running steps of its own. */
+const CALLS_A_WORKFLOW = /^ {4}uses:/
 
 const PULL_REQUEST = 'pull_request'
 
@@ -108,7 +116,15 @@ function theTrigger(file: string, lines: readonly string[]): PullRequestTrigger 
 
 /** One job, from the lines of the jobs block between its header and the next. */
 function theJob(id: string, lines: readonly string[]): Job {
-  return { id, lines, steps: lines.flatMap((line) => ONE_LINE_RUN.exec(line)?.[1] ?? []) }
+  const timeout = lines.map((line) => TIMEOUT.exec(line)).find((found) => found !== null)
+  return {
+    id,
+    lines,
+    steps: lines.flatMap((line) => ONE_LINE_RUN.exec(line)?.[1] ?? []),
+    // What follows the colon, as written: whether it is a count is a later reader's question, not this one's.
+    timeoutMinutes: timeout === undefined ? undefined : (timeout[1] ?? ''),
+    callsAWorkflow: lines.some((line) => CALLS_A_WORKFLOW.test(line)),
+  }
 }
 
 /** Every job under the workflow's `jobs:`. Throws when it holds none this reader can see. */

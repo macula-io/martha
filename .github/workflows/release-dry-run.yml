@@ -49,6 +49,9 @@ jobs:
   push:
     needs: advisories
     runs-on: ubuntu-latest
+    # Measured 2026-11-20: 33 s at its longest in 5 green runs; five minutes is the floor for a job
+    # of seconds, and far under GitHub's six hours (martha#992).
+    timeout-minutes: 5
     permissions:
       contents: read
       packages: write
@@ -156,6 +159,9 @@ jobs:
   rehearse:
     needs: [push, sign]
     runs-on: ubuntu-latest
+    # Measured 2026-11-20: 8 s at its longest in 5 green runs; five minutes is the floor for a job
+    # of seconds, and far under GitHub's six hours (martha#992).
+    timeout-minutes: 5
     permissions:
       contents: read
       packages: read
