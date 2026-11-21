@@ -41,6 +41,7 @@ import { TRANSCRIPTS_WHEN_UNNAMED } from '../declare_crew/the_crews_transcripts.
 import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
 import { CLOCK_ZONE_WHEN_UNNAMED } from '../declare_crew/the_crews_clock_zone.ts'
 import { WHERE_A_CREW_OPENS_WHEN_UNNAMED } from '../declare_crew/the_crews_workspace.ts'
+import { GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 
 const MEMBER = 'Ceres'
 const SLUG = '256-the-five'
@@ -63,7 +64,10 @@ const commitIn = (cwd: string, message: string): void => {
 }
 
 /** A real git, so a test sees what git does rather than what a stand-in is told to say. */
+/** A real git, and a GitHub that knows of no open pull request on the repository this file names (martha#973): a finish
+ * asks for the pull requests based on the branch it would delete, and no test here reaches the network. */
 const runReal = async (request: ProcessRequest): Promise<ProcessOutcome> => {
+  if (request.command === GITHUB_CLI) return { exit_code: 0, stdout: '[]', stderr: '' }
   const outcome = spawnSync(request.command, [...request.args], { cwd: request.cwd, encoding: 'utf8' })
   return { exit_code: outcome.status, stdout: outcome.stdout ?? '', stderr: outcome.stderr ?? '' }
 }

@@ -151,7 +151,7 @@ const THE_REPO = 'macula-io/martha'
 const THE_CLONE = join(THE_CLONES, THE_REPO)
 const THE_LOCAL_TIP = '72081ee'
 const THE_ORIGIN_TIP = 'e8c127a'
-const THE_TIPS_SAID = `It removes ${THE_BRANCH}, and the ask records both tips the yes covers: this clone at ${THE_LOCAL_TIP}, origin at ${THE_ORIGIN_TIP}.`
+const THE_TIPS_SAID = `It removes ${THE_BRANCH} in ${THE_REPO}, and the ask records both tips the yes covers: this clone at ${THE_LOCAL_TIP}, origin at ${THE_ORIGIN_TIP}.`
 
 /** git's own words in a run: Martha's `-c <name>=<value>` settings come first, and are not what the test asked for. */
 const gitSaid = (args: readonly string[]): string => {
@@ -262,7 +262,7 @@ test('an ask that removes a branch records both tips, read in the clone it names
 
   assert.match(TOLD(await place.answer(LIST_ASKS, {}, 'session-lead')), new RegExp(`- 0 \\(from Builder1\\): Delete the merged branch vesta/313-old\\? It removes ${THE_BRANCH}`), 'see_the_owners_asks names both tips')
   const lead = aPlaceOver('rows-for-branches', { member: LEAD, processes: aGitOnlyInTheClone(THE_TWO_COPIES), settings: theSettingsWith(THE_CLONES) })
-  assert.match(TOLD(await lead.answer(TAKE_ASKS, {}, 'session-lead')), /It removes vesta\/313-old, and the ask records both tips the yes covers: this clone at 72081ee, origin at e8c127a\./, 'take_the_owners_asks, which the menu is built from, names both tips')
+  assert.match(TOLD(await lead.answer(TAKE_ASKS, {}, 'session-lead')), /It removes vesta\/313-old in macula-io\/martha, and the ask records both tips the yes covers: this clone at 72081ee, origin at e8c127a\./, 'take_the_owners_asks, which the menu is built from, names both tips')
 })
 
 test('a branch the queue would change never reaches a menu, and no tip is read for it (martha#391 r=1)', async () => {

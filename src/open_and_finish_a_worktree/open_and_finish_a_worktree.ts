@@ -444,6 +444,10 @@ async function finishTheWorktree(
   if ('refused' in guards) return guards
   const held = await workNoOtherCopyHas(host, path, read.branch, discard_ignored, guards.approved)
   if ('refused' in held) return held
+  // The pull requests are read last of the guards, and only once nothing of the member's own work stops the finish: a
+  // refusal the member can act on in its own worktree is the one it should read first (martha#973).
+  const kept = await keptForItsPullRequests(host, form.clone, form.repo, read.branch)
+  if (kept !== undefined) return kept
   return removeTheWorktree(host, { clone: form.clone, path }, read.branch, work, held.discarded)
 }
 
@@ -475,8 +479,6 @@ async function theLiveFormsGuards(
   if (allowed !== undefined) return allowed
   const approved = await theApprovedRemoval(request.host, args, form.repo, branch)
   if (approved !== undefined && 'refused' in approved) return approved
-  const kept = await keptForItsPullRequests(request.host, form.clone, form.repo, branch)
-  if (kept !== undefined) return kept
   return { approved }
 }
 
